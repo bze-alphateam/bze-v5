@@ -8,13 +8,15 @@ import (
 	"github.com/bze-alphateam/bze/x/epochs/types"
 	"github.com/cosmos/cosmos-sdk/codec"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+
+	storetypes "github.com/cosmos/cosmos-sdk/store/types"
 )
 
 type (
 	Keeper struct {
 		cdc      codec.BinaryCodec
-		storeKey sdk.StoreKey
-		memKey   sdk.StoreKey
+		storeKey storetypes.StoreKey
+		memKey   storetypes.StoreKey
 
 		hooks []types.EpochHook
 	}
@@ -23,7 +25,7 @@ type (
 func NewKeeper(
 	cdc codec.BinaryCodec,
 	storeKey,
-	memKey sdk.StoreKey,
+	memKey storetypes.StoreKey,
 ) *Keeper {
 
 	return &Keeper{
