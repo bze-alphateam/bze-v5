@@ -1,6 +1,7 @@
 package keeper
 
 import (
+	"cosmossdk.io/math"
 	"fmt"
 	"github.com/bze-alphateam/bze/x/rewards/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -55,31 +56,31 @@ func (k Keeper) getDistributeRewardHandler() func(ctx sdk.Context, reward types.
 }
 
 func (k Keeper) distributeStakingRewards(sr *types.StakingReward, rewardAmount string) error {
-	stakedAmount, ok := sdk.NewIntFromString(sr.StakedAmount)
-	if !ok {
-		return fmt.Errorf("could not transform staked amount from storage into int")
+	stakedAmount, err := math.LegacyNewDecFromStr(sr.StakedAmount)
+	if err != nil {
+		return fmt.Errorf("could not transform staked amount from storage into int: %w", err)
 	}
 
 	if !stakedAmount.IsPositive() {
 		return fmt.Errorf("no stakers found")
 	}
 
-	reward, ok := sdk.NewIntFromString(rewardAmount)
-	if !ok {
-		return fmt.Errorf("could not transform reward amount to int")
+	reward, err := math.LegacyNewDecFromStr(rewardAmount)
+	if err != nil {
+		return fmt.Errorf("could not transform reward amount to int: %w", err)
 	}
 
 	if !reward.IsPositive() {
 		return fmt.Errorf("reward amount should be positive")
 	}
 
-	sFloat, err := sdk.NewDecFromStr(sr.DistributedStake)
+	sFloat, err := math.LegacyNewDecFromStr(sr.DistributedStake)
 	if err != nil {
 		return err
 	}
 
 	//S = S + r / T;
-	sFloat = sFloat.Add(reward.ToDec().Quo(stakedAmount.ToDec()))
+	sFloat = sFloat.Add(reward.Quo(stakedAmount))
 	sr.DistributedStake = sFloat.String()
 
 	return nil

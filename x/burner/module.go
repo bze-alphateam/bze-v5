@@ -4,10 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/bze-alphateam/bze/bzeutils"
 	"github.com/cosmos/cosmos-sdk/telemetry"
 	"time"
 
-	"github.com/gorilla/mux"
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/spf13/cobra"
 
@@ -72,10 +72,6 @@ func (AppModuleBasic) ValidateGenesis(cdc codec.JSONCodec, config client.TxEncod
 		return fmt.Errorf("failed to unmarshal %s genesis state: %w", types.ModuleName, err)
 	}
 	return genState.Validate()
-}
-
-// RegisterRESTRoutes registers the capability module's REST service handlers.
-func (AppModuleBasic) RegisterRESTRoutes(clientCtx client.Context, rtr *mux.Router) {
 }
 
 // RegisterGRPCGatewayRoutes registers the gRPC Gateway routes for the module.
@@ -178,7 +174,16 @@ func (am AppModule) BeginBlock(_ sdk.Context, _ abci.RequestBeginBlock) {}
 // returns no validator updates.
 func (am AppModule) EndBlock(ctx sdk.Context, _ abci.RequestEndBlock) []abci.ValidatorUpdate {
 	defer telemetry.ModuleMeasureSince(types.ModuleName, time.Now(), telemetry.MetricKeyBeginBlocker)
-	am.keeper.WithdrawLuckyRaffleParticipants(ctx, ctx.BlockHeight())
+	wrappedFunc := func(ctx sdk.Context) error {
+		am.keeper.WithdrawLuckyRaffleParticipants(ctx, ctx.BlockHeight())
+
+		return nil
+	}
+
+	err := bzeutils.ApplyFuncIfNoError(ctx, wrappedFunc)
+	if err != nil {
+		am.keeper.Logger(ctx).Error("error on burner module EndBlock", "err", err)
+	}
 
 	return []abci.ValidatorUpdate{}
 }

@@ -44,22 +44,10 @@ func (k Keeper) WithdrawLuckyRaffleParticipants(ctx sdk.Context, height int64) {
 			continue
 		}
 
-		//get ticket price to enter the raffle
-		ticketPriceInt, ok := sdk.NewIntFromString(raffle.TicketPrice)
-		if !ok {
-			//should never happen
-			logger.Error("could not parse ticket price")
-		}
-
 		if k.IsLucky(ctx, &raffle, creatorAddr.String()) {
 			logger.With("address", creatorAddr.String(), "denom", raffle.Denom).Info("user won raffle")
 			//user won
-			winRatio := sdk.MustNewDecFromStr(raffle.Ratio)
-			wonAmount := currentPot.Amount.Sub(ticketPriceInt).ToDec().Mul(winRatio).TruncateInt()
-			if !wonAmount.IsPositive() {
-				wonAmount = currentPot.Amount.Sub(ticketPriceInt)
-			}
-			wonCoin := sdk.NewCoin(currentPot.Denom, wonAmount)
+			wonCoin := k.getWonCoin(&raffle, currentPot)
 
 			err = k.bankKeeper.SendCoinsFromModuleToAccount(ctx, types.RaffleModuleName, creatorAddr, sdk.NewCoins(wonCoin))
 			if err != nil {
@@ -109,4 +97,18 @@ func (k Keeper) WithdrawLuckyRaffleParticipants(ctx sdk.Context, height int64) {
 
 		k.RemoveRaffleParticipant(ctx, participant)
 	}
+}
+
+func (k Keeper) getWonCoin(raffle *types.Raffle, pot sdk.Coin) sdk.Coin {
+	//get ticket price to enter the raffle
+	ticketPrice := sdk.MustNewDecFromStr(raffle.TicketPrice)
+	winRatio := sdk.MustNewDecFromStr(raffle.Ratio)
+	potAmount := sdk.NewDec(pot.Amount.Int64())
+
+	prize := potAmount.Sub(ticketPrice).Mul(winRatio).TruncateInt()
+	if !prize.IsPositive() {
+		prize = pot.Amount.SubRaw(pot.Amount.Int64())
+	}
+
+	return sdk.NewCoin(pot.Denom, prize)
 }

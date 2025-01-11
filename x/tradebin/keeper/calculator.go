@@ -1,6 +1,7 @@
 package keeper
 
 import (
+	"cosmossdk.io/math"
 	"fmt"
 	"github.com/bze-alphateam/bze/x/tradebin/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -37,12 +38,12 @@ func CalculateMinAmount(price string) sdk.Int {
 // When the user submits an order we have to capture the coins needed for that order to be placed.
 // This function returns the sdk.Coins that we have to send from user's account to module and back
 func (k Keeper) GetOrderSdkCoin(orderType, orderPrice string, orderAmount sdk.Int, market *types.Market) (coin sdk.Coin, dust sdk.Dec, err error) {
-	var amount sdk.Int
+	var amount math.Int
 	var denom string
 	switch orderType {
 	case types.OrderTypeBuy:
 		denom = market.Quote
-		oAmount := orderAmount.ToDec()
+		oAmount := sdk.NewDec(orderAmount.Int64())
 		oPrice, err := sdk.NewDecFromStr(orderPrice)
 		if err != nil {
 			return coin, dust, sdkerrors.Wrapf(types.ErrInvalidOrderPrice, "error when transforming order price: %v", err)

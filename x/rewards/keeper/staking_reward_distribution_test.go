@@ -1,6 +1,7 @@
 package keeper_test
 
 import (
+	"cosmossdk.io/math"
 	"fmt"
 	"github.com/bze-alphateam/bze/x/rewards/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -21,8 +22,8 @@ func (suite *IntegrationTestSuite) TestDistributeAllStakingRewards() {
 	}
 	suite.k.SetStakingReward(suite.ctx, initial)
 
-	rewardAmt, ok := sdk.NewIntFromString(initial.PrizeAmount)
-	suite.Require().True(ok)
+	rewardAmt, err := math.LegacyNewDecFromStr(initial.PrizeAmount)
+	suite.Require().NoError(err)
 
 	for i := uint32(0); i < initial.Duration; i++ {
 		suite.k.DistributeAllStakingRewards(suite.ctx)
@@ -33,7 +34,7 @@ func (suite *IntegrationTestSuite) TestDistributeAllStakingRewards() {
 		staked, ok := sdk.NewIntFromString(storage.StakedAmount)
 		suite.Require().True(ok)
 
-		newDistribution := rewardAmt.ToDec().Quo(staked.ToDec())
+		newDistribution := rewardAmt.Quo(staked.ToDec())
 		distributed, err := sdk.NewDecFromStr(initial.DistributedStake)
 		suite.Require().NoError(err)
 
