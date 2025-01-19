@@ -3,12 +3,12 @@ module github.com/bze-alphateam/bze
 go 1.20
 
 require (
+	cosmossdk.io/math v1.0.0-rc.0
 	github.com/cosmos/cosmos-sdk v0.46.16
 	github.com/cosmos/ibc-go/v5 v5.4.0
 	github.com/gogo/protobuf v1.3.3
 	github.com/golang/protobuf v1.5.4
 	github.com/golangci/golangci-lint v1.50.1
-	github.com/gorilla/mux v1.8.0
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0
 	github.com/microcosm-cc/bluemonday v1.0.21
 	github.com/spf13/cast v1.5.0
@@ -31,7 +31,6 @@ require (
 	cloud.google.com/go/iam v1.1.5 // indirect
 	cloud.google.com/go/storage v1.30.1 // indirect
 	cosmossdk.io/errors v1.0.0-beta.7 // indirect
-	cosmossdk.io/math v1.0.0-rc.0 // indirect
 	filippo.io/edwards25519 v1.0.0-rc.1 // indirect
 	github.com/99designs/go-keychain v0.0.0-20191008050251-8e49817e8af4 // indirect
 	github.com/99designs/keyring v1.2.1 // indirect
@@ -143,6 +142,7 @@ require (
 	github.com/gordonklaus/ineffassign v0.0.0-20210914165742-4cc7213b9bc8 // indirect
 	github.com/gorilla/css v1.0.0 // indirect
 	github.com/gorilla/handlers v1.5.1 // indirect
+	github.com/gorilla/mux v1.8.0 // indirect
 	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/gostaticanalysis/analysisutil v0.7.1 // indirect
 	github.com/gostaticanalysis/comment v1.4.2 // indirect
@@ -306,5 +306,6 @@ require (
 replace (
 	github.com/99designs/keyring => github.com/cosmos/keyring v1.2.0
 	github.com/gogo/protobuf => github.com/regen-network/protobuf v1.3.3-alpha.regen.1
+	github.com/syndtr/goleveldb => github.com/syndtr/goleveldb v1.0.1-0.20210819022825-2ae1ddf74ef7
 	github.com/tendermint/tendermint => github.com/cometbft/cometbft v0.34.29
 )

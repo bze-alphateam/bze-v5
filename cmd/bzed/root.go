@@ -14,7 +14,6 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 	dbm "github.com/tendermint/tm-db"
 
-	"github.com/cosmos/cosmos-sdk/baseapp"
 	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/client/config"
 	"github.com/cosmos/cosmos-sdk/client/debug"
@@ -23,9 +22,6 @@ import (
 	"github.com/cosmos/cosmos-sdk/client/rpc"
 	"github.com/cosmos/cosmos-sdk/server"
 	servertypes "github.com/cosmos/cosmos-sdk/server/types"
-	"github.com/cosmos/cosmos-sdk/store"
-	sdk "github.com/cosmos/cosmos-sdk/types"
-
 	authcli "github.com/cosmos/cosmos-sdk/x/auth/client/cli"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
@@ -202,20 +198,11 @@ func (ac appCreator) createApp(
 	traceStore io.Writer,
 	appOpts servertypes.AppOptions,
 ) servertypes.Application {
-	var cache sdk.MultiStorePersistentCache
-
-	if cast.ToBool(appOpts.Get(server.FlagInterBlockCache)) {
-		cache = store.NewCommitKVStoreCacheManager()
-	}
+	baseappOptions := server.DefaultBaseappOptions(appOpts)
 
 	skipUpgradeHeights := make(map[int64]bool)
 	for _, h := range cast.ToIntSlice(appOpts.Get(server.FlagUnsafeSkipUpgrades)) {
 		skipUpgradeHeights[int64(h)] = true
-	}
-
-	pruningOpts, err := server.GetPruningOptionsFromFlags(appOpts)
-	if err != nil {
-		panic(err)
 	}
 
 	return app.New(
@@ -224,15 +211,7 @@ func (ac appCreator) createApp(
 		cast.ToUint(appOpts.Get(server.FlagInvCheckPeriod)),
 		ac.encodingConfig,
 		appOpts,
-		baseapp.SetPruning(pruningOpts),
-		baseapp.SetMinGasPrices(cast.ToString(appOpts.Get(server.FlagMinGasPrices))),
-		baseapp.SetMinRetainBlocks(cast.ToUint64(appOpts.Get(server.FlagMinRetainBlocks))),
-		baseapp.SetHaltHeight(cast.ToUint64(appOpts.Get(server.FlagHaltHeight))),
-		baseapp.SetHaltTime(cast.ToUint64(appOpts.Get(server.FlagHaltTime))),
-		baseapp.SetMinRetainBlocks(cast.ToUint64(appOpts.Get(server.FlagMinRetainBlocks))),
-		baseapp.SetInterBlockCache(cache),
-		baseapp.SetTrace(cast.ToBool(appOpts.Get(server.FlagTrace))),
-		baseapp.SetIndexEvents(cast.ToStringSlice(appOpts.Get(server.FlagIndexEvents))),
+		baseappOptions...,
 	)
 }
 

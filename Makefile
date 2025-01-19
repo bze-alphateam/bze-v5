@@ -140,6 +140,20 @@ test-sim-after-import:
 ###############################################################################
 ###                                Localnet                                 ###
 ###############################################################################
+start-localnet-ci: build
+	rm -rf ~/.bzed-liveness
+	./build/bzed init liveness --staking-bond-denom ubze --chain-id liveness --home ~/.bzed-liveness
+	./build/bzed config chain-id liveness --home ~/.bzed-liveness
+	./build/bzed config keyring-backend test --home ~/.bzed-liveness
+	./build/bzed keys add val --home ~/.bzed-liveness
+	./build/bzed genesis add-genesis-account val 1000000000000ubze --home ~/.bzed-liveness --keyring-backend test
+	./build/bzed keys add user --home ~/.bzed-liveness
+	./build/bzed genesis add-genesis-account user 1000000000ubze --home ~/.bzed-liveness --keyring-backend test
+	./build/bzed genesis gentx val 1000000000ubze --home ~/.bzed-liveness --chain-id liveness
+	./build/bzed genesis collect-gentxs --home ~/.bzed-liveness
+	sed -i.bak 's#^minimum-gas-prices = .*#minimum-gas-prices = "0.001ubze,0.0001stake"#g' ~/.bzed-liveness/config/app.toml
+	./build/bzed start --home ~/.bzed-liveness --x-crisis-skip-assert-invariants
+.PHONY: start-localnet-ci
 
 build-docker-bzednode:
 	$(MAKE) -C check-networks/local
