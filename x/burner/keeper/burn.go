@@ -28,5 +28,7 @@ func (k Keeper) burnModuleCoins(ctx sdk.Context) error {
 		return err
 	}
 
+	k.Logger(ctx).With("coins", coins.String()).Info("coins successfully burned")
+
 	return nil
 }
