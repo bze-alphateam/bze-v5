@@ -9,7 +9,7 @@ import (
 	"github.com/spf13/cobra"
 	"time"
 
-	abci "github.com/tendermint/tendermint/abci/types"
+	abci "github.com/cometbft/cometbft/abci/types"
 
 	"github.com/bze-alphateam/bze/x/tradebin/client/cli"
 	"github.com/bze-alphateam/bze/x/tradebin/keeper"

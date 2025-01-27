@@ -3,11 +3,11 @@ package tokenfactory
 import (
 	"math/rand"
 
+	simappparams "cosmossdk.io/simapp/params"
 	"github.com/bze-alphateam/bze/testutil/sample"
 	tokenfactorysimulation "github.com/bze-alphateam/bze/x/tokenfactory/simulation"
 	"github.com/bze-alphateam/bze/x/tokenfactory/types"
 	"github.com/cosmos/cosmos-sdk/baseapp"
-	simappparams "github.com/cosmos/cosmos-sdk/simapp/params"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/module"
 	simtypes "github.com/cosmos/cosmos-sdk/types/simulation"

@@ -3,11 +3,11 @@ package burner
 import (
 	"math/rand"
 
+	simappparams "cosmossdk.io/simapp/params"
 	"github.com/bze-alphateam/bze/testutil/sample"
 	burnersimulation "github.com/bze-alphateam/bze/x/burner/simulation"
 	"github.com/bze-alphateam/bze/x/burner/types"
 	"github.com/cosmos/cosmos-sdk/baseapp"
-	simappparams "github.com/cosmos/cosmos-sdk/simapp/params"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/module"
 	simtypes "github.com/cosmos/cosmos-sdk/types/simulation"

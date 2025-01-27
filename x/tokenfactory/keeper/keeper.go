@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"github.com/cosmos/cosmos-sdk/store/prefix"
 
-	"github.com/tendermint/tendermint/libs/log"
+	"github.com/cometbft/cometbft/libs/log"
 
 	"github.com/bze-alphateam/bze/x/tokenfactory/types"
 	"github.com/cosmos/cosmos-sdk/codec"
