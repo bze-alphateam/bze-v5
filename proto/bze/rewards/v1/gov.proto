@@ -1,5 +1,5 @@
 syntax = "proto3";
-package bze.v1.rewards;
+package bze.rewards.v1;
 
 option go_package = "github.com/bze-alphateam/bze/x/rewards/types";
 

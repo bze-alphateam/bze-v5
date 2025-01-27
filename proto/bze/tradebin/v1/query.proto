@@ -4,9 +4,9 @@ package bze.tradebin.v1;
 import "gogoproto/gogo.proto";
 import "google/api/annotations.proto";
 import "cosmos/base/query/v1beta1/pagination.proto";
-import "tradebin/params.proto";
-import "tradebin/market.proto";
-import "tradebin/order.proto";
+import "bze/tradebin/v1/params.proto";
+import "bze/tradebin/v1/market.proto";
+import "bze/tradebin/v1/order.proto";
 // this line is used by starport scaffolding # 1
 
 option go_package = "github.com/bze-alphateam/bze/x/tradebin/types";

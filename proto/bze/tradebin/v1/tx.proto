@@ -1,6 +1,8 @@
 syntax = "proto3";
 package bze.tradebin.v1;
 
+import "cosmos/msg/v1/msg.proto";
+
 // this line is used by starport scaffolding # proto/tx/import
 
 option go_package = "github.com/bze-alphateam/bze/x/tradebin/types";

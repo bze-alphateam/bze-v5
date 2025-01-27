@@ -3,6 +3,7 @@ package bze.tokenfactory.v1;
 
 import "gogoproto/gogo.proto";
 import "cosmos/bank/v1beta1/bank.proto";
+import "cosmos/msg/v1/msg.proto";
 
 // this line is used by starport scaffolding # proto/tx/import
 

@@ -1,11 +1,11 @@
 syntax = "proto3";
-package bze.v1.rewards;
+package bze.rewards.v1;
 
 import "gogoproto/gogo.proto";
-import "rewards/params.proto";
-import "rewards/staking_reward.proto";
-import "rewards/trading_reward.proto";
-import "rewards/staking_reward_participant.proto";
+import "bze/rewards/v1/params.proto";
+import "bze/rewards/v1/staking_reward.proto";
+import "bze/rewards/v1/trading_reward.proto";
+import "bze/rewards/v1/staking_reward_participant.proto";
 // this line is used by starport scaffolding # genesis/proto/import
 
 option go_package = "github.com/bze-alphateam/bze/x/rewards/types";

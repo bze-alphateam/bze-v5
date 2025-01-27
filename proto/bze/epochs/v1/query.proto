@@ -3,7 +3,7 @@ package bze.epochs.v1;
 
 import "gogoproto/gogo.proto";
 import "google/api/annotations.proto";
-import "epochs/genesis.proto";
+import "bze/epochs/v1/genesis.proto";
 
 option go_package = "github.com/bze-alphateam/bze/x/epochs/types";
 

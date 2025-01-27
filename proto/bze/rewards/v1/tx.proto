@@ -1,5 +1,7 @@
 syntax = "proto3";
-package bze.v1.rewards;
+package bze.rewards.v1;
+
+import "cosmos/msg/v1/msg.proto";
 
 // this line is used by starport scaffolding # proto/tx/import
 

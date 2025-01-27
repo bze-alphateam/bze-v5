@@ -4,8 +4,8 @@ package bze.tokenfactory.v1;
 import "gogoproto/gogo.proto";
 import "google/api/annotations.proto";
 import "cosmos/base/query/v1beta1/pagination.proto";
-import "tokenfactory/params.proto";
-import "tokenfactory/denom_authority.proto";
+import "bze/tokenfactory/v1/params.proto";
+import "bze/tokenfactory/v1/denom_authority.proto";
 // this line is used by starport scaffolding # 1
 
 option go_package = "github.com/bze-alphateam/bze/x/tokenfactory/types";
