@@ -1,13 +1,29 @@
 package keeper
 
 import (
+	"github.com/bze-alphateam/bze/bzeutils"
 	"github.com/bze-alphateam/bze/x/burner/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 )
 
 func (k Keeper) burnModuleCoins(ctx sdk.Context) error {
 	moduleAcc := k.accKeeper.GetModuleAccount(ctx, types.ModuleName)
-	coins := k.bankKeeper.GetAllBalances(ctx, moduleAcc.GetAddress())
+	allCoins := k.bankKeeper.GetAllBalances(ctx, moduleAcc.GetAddress())
+	if allCoins.IsZero() {
+		//nothing to burn at this moment
+		return nil
+	}
+
+	// filter out IBC tokens
+	coins := sdk.NewCoins()
+	for _, c := range allCoins {
+		if bzeutils.IsIBCDenom(c.Denom) {
+			continue
+		}
+
+		coins = coins.Add(c)
+	}
+
 	if coins.IsZero() {
 		//nothing to burn at this moment
 		return nil

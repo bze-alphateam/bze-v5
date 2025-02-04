@@ -6,6 +6,7 @@ import (
 	"github.com/bze-alphateam/bze/x/burner/types"
 	epochskeeper "github.com/bze-alphateam/bze/x/epochs/keeper"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	bankkeeper "github.com/cosmos/cosmos-sdk/x/bank/keeper"
 	"github.com/stretchr/testify/suite"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	"testing"
@@ -20,6 +21,7 @@ type IntegrationTestSuite struct {
 	k         *keeper.Keeper
 	msgServer types.MsgServer
 	ek        *epochskeeper.Keeper
+	bank      *bankkeeper.Keeper
 }
 
 func (suite *IntegrationTestSuite) SetupTest() {
@@ -31,6 +33,7 @@ func (suite *IntegrationTestSuite) SetupTest() {
 
 	suite.k = &app.BurnerKeeper
 	suite.ek = &app.EpochsKeeper
+	suite.bank = &app.BankKeeper
 	suite.msgServer = keeper.NewMsgServerImpl(app.BurnerKeeper)
 }
 
