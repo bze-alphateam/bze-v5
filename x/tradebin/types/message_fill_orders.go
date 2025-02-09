@@ -5,6 +5,10 @@ import (
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
 )
 
+const (
+	TypeMsgFillOrders = "fill_orders"
+)
+
 var _ sdk.Msg = &MsgFillOrders{}
 
 func NewMsgFillOrders(creator string, marketId string, orderType string, orders []*FillOrderItem) *MsgFillOrders {
@@ -21,7 +25,7 @@ func (msg *MsgFillOrders) Route() string {
 }
 
 func (msg *MsgFillOrders) Type() string {
-	return TypeMsgCancelOrder
+	return TypeMsgFillOrders
 }
 
 func (msg *MsgFillOrders) GetSigners() []sdk.AccAddress {
