@@ -45,7 +45,7 @@ export interface TxResponse {
   /**
    * Events defines all the events emitted by processing a transaction. Note,
    * these events include those emitted by processing all the messages and those
-   * emitted from the ante handler. Whereas Logs contains the events, with
+   * emitted from the ante. Whereas Logs contains the events, with
    * additional metadata, emitted only by processing the messages.
    *
    * Since: cosmos-sdk 0.42.11, 0.44.5, 0.45
@@ -95,6 +95,10 @@ export interface Result {
   /**
    * Data is any data returned from message or handler execution. It MUST be
    * length prefixed in order to separate data from multiple message executions.
+   * Deprecated. This field is still populated, but prefer msg_response instead
+   * because it also contains the Msg response typeURL.
+   *
+   * @deprecated
    */
   data: Uint8Array;
   /** Log contains the log information from message or handler execution. */
@@ -104,6 +108,12 @@ export interface Result {
    * or handler execution.
    */
   events: Event[];
+  /**
+   * msg_responses contains the Msg handler responses type packed in Anys.
+   *
+   * Since: cosmos-sdk 0.46
+   */
+  msgResponses: Any[];
 }
 
 /**
@@ -118,6 +128,8 @@ export interface SimulationResponse {
 /**
  * MsgData defines the data returned in a Result object during message
  * execution.
+ *
+ * @deprecated
  */
 export interface MsgData {
   msgType: string;
@@ -129,7 +141,18 @@ export interface MsgData {
  * for each message.
  */
 export interface TxMsgData {
+  /**
+   * data field is deprecated and not populated.
+   *
+   * @deprecated
+   */
   data: MsgData[];
+  /**
+   * msg_responses contains the Msg handler responses packed into Anys.
+   *
+   * Since: cosmos-sdk 0.46
+   */
+  msgResponses: Any[];
 }
 
 /** SearchTxsResult defines a structure for querying txs pageable */
@@ -771,6 +794,9 @@ export const Result = {
     for (const v of message.events) {
       Event.encode(v!, writer.uint32(26).fork()).ldelim();
     }
+    for (const v of message.msgResponses) {
+      Any.encode(v!, writer.uint32(34).fork()).ldelim();
+    }
     return writer;
   },
 
@@ -779,6 +805,7 @@ export const Result = {
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = { ...baseResult } as Result;
     message.events = [];
+    message.msgResponses = [];
     while (reader.pos < end) {
       const tag = reader.uint32();
       switch (tag >>> 3) {
@@ -791,6 +818,9 @@ export const Result = {
         case 3:
           message.events.push(Event.decode(reader, reader.uint32()));
           break;
+        case 4:
+          message.msgResponses.push(Any.decode(reader, reader.uint32()));
+          break;
         default:
           reader.skipType(tag & 7);
           break;
@@ -802,6 +832,7 @@ export const Result = {
   fromJSON(object: any): Result {
     const message = { ...baseResult } as Result;
     message.events = [];
+    message.msgResponses = [];
     if (object.data !== undefined && object.data !== null) {
       message.data = bytesFromBase64(object.data);
     }
@@ -813,6 +844,11 @@ export const Result = {
     if (object.events !== undefined && object.events !== null) {
       for (const e of object.events) {
         message.events.push(Event.fromJSON(e));
+      }
+    }
+    if (object.msgResponses !== undefined && object.msgResponses !== null) {
+      for (const e of object.msgResponses) {
+        message.msgResponses.push(Any.fromJSON(e));
       }
     }
     return message;
@@ -830,12 +866,20 @@ export const Result = {
     } else {
       obj.events = [];
     }
+    if (message.msgResponses) {
+      obj.msgResponses = message.msgResponses.map((e) =>
+        e ? Any.toJSON(e) : undefined
+      );
+    } else {
+      obj.msgResponses = [];
+    }
     return obj;
   },
 
   fromPartial(object: DeepPartial<Result>): Result {
     const message = { ...baseResult } as Result;
     message.events = [];
+    message.msgResponses = [];
     if (object.data !== undefined && object.data !== null) {
       message.data = object.data;
     } else {
@@ -849,6 +893,11 @@ export const Result = {
     if (object.events !== undefined && object.events !== null) {
       for (const e of object.events) {
         message.events.push(Event.fromPartial(e));
+      }
+    }
+    if (object.msgResponses !== undefined && object.msgResponses !== null) {
+      for (const e of object.msgResponses) {
+        message.msgResponses.push(Any.fromPartial(e));
       }
     }
     return message;
@@ -1014,6 +1063,9 @@ export const TxMsgData = {
     for (const v of message.data) {
       MsgData.encode(v!, writer.uint32(10).fork()).ldelim();
     }
+    for (const v of message.msgResponses) {
+      Any.encode(v!, writer.uint32(18).fork()).ldelim();
+    }
     return writer;
   },
 
@@ -1022,11 +1074,15 @@ export const TxMsgData = {
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = { ...baseTxMsgData } as TxMsgData;
     message.data = [];
+    message.msgResponses = [];
     while (reader.pos < end) {
       const tag = reader.uint32();
       switch (tag >>> 3) {
         case 1:
           message.data.push(MsgData.decode(reader, reader.uint32()));
+          break;
+        case 2:
+          message.msgResponses.push(Any.decode(reader, reader.uint32()));
           break;
         default:
           reader.skipType(tag & 7);
@@ -1039,9 +1095,15 @@ export const TxMsgData = {
   fromJSON(object: any): TxMsgData {
     const message = { ...baseTxMsgData } as TxMsgData;
     message.data = [];
+    message.msgResponses = [];
     if (object.data !== undefined && object.data !== null) {
       for (const e of object.data) {
         message.data.push(MsgData.fromJSON(e));
+      }
+    }
+    if (object.msgResponses !== undefined && object.msgResponses !== null) {
+      for (const e of object.msgResponses) {
+        message.msgResponses.push(Any.fromJSON(e));
       }
     }
     return message;
@@ -1054,15 +1116,28 @@ export const TxMsgData = {
     } else {
       obj.data = [];
     }
+    if (message.msgResponses) {
+      obj.msgResponses = message.msgResponses.map((e) =>
+        e ? Any.toJSON(e) : undefined
+      );
+    } else {
+      obj.msgResponses = [];
+    }
     return obj;
   },
 
   fromPartial(object: DeepPartial<TxMsgData>): TxMsgData {
     const message = { ...baseTxMsgData } as TxMsgData;
     message.data = [];
+    message.msgResponses = [];
     if (object.data !== undefined && object.data !== null) {
       for (const e of object.data) {
         message.data.push(MsgData.fromPartial(e));
+      }
+    }
+    if (object.msgResponses !== undefined && object.msgResponses !== null) {
+      for (const e of object.msgResponses) {
+        message.msgResponses.push(Any.fromPartial(e));
       }
     }
     return message;

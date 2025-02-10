@@ -7,10 +7,18 @@ import { msgTypes } from './registry';
 import { IgniteClient } from "../client"
 import { MissingWalletError } from "../helpers"
 import { Api } from "./rest";
+import { MsgJoinRaffle } from "./types/burner/tx";
 import { MsgFundBurner } from "./types/burner/tx";
+import { MsgStartRaffle } from "./types/burner/tx";
 
 
-export { MsgFundBurner };
+export { MsgJoinRaffle, MsgFundBurner, MsgStartRaffle };
+
+type sendMsgJoinRaffleParams = {
+  value: MsgJoinRaffle,
+  fee?: StdFee,
+  memo?: string
+};
 
 type sendMsgFundBurnerParams = {
   value: MsgFundBurner,
@@ -18,9 +26,23 @@ type sendMsgFundBurnerParams = {
   memo?: string
 };
 
+type sendMsgStartRaffleParams = {
+  value: MsgStartRaffle,
+  fee?: StdFee,
+  memo?: string
+};
+
+
+type msgJoinRaffleParams = {
+  value: MsgJoinRaffle,
+};
 
 type msgFundBurnerParams = {
   value: MsgFundBurner,
+};
+
+type msgStartRaffleParams = {
+  value: MsgStartRaffle,
 };
 
 
@@ -41,6 +63,20 @@ export const txClient = ({ signer, prefix, addr }: TxClientOptions = { addr: "ht
 
   return {
 		
+		async sendMsgJoinRaffle({ value, fee, memo }: sendMsgJoinRaffleParams): Promise<DeliverTxResponse> {
+			if (!signer) {
+					throw new Error('TxClient:sendMsgJoinRaffle: Unable to sign Tx. Signer is not present.')
+			}
+			try {			
+				const { address } = (await signer.getAccounts())[0]; 
+				const signingClient = await SigningStargateClient.connectWithSigner(addr,signer,{registry, prefix});
+				let msg = this.msgJoinRaffle({ value: MsgJoinRaffle.fromPartial(value) })
+				return await signingClient.signAndBroadcast(address, [msg], fee ? fee : defaultFee, memo)
+			} catch (e: any) {
+				throw new Error('TxClient:sendMsgJoinRaffle: Could not broadcast Tx: '+ e.message)
+			}
+		},
+		
 		async sendMsgFundBurner({ value, fee, memo }: sendMsgFundBurnerParams): Promise<DeliverTxResponse> {
 			if (!signer) {
 					throw new Error('TxClient:sendMsgFundBurner: Unable to sign Tx. Signer is not present.')
@@ -55,12 +91,42 @@ export const txClient = ({ signer, prefix, addr }: TxClientOptions = { addr: "ht
 			}
 		},
 		
+		async sendMsgStartRaffle({ value, fee, memo }: sendMsgStartRaffleParams): Promise<DeliverTxResponse> {
+			if (!signer) {
+					throw new Error('TxClient:sendMsgStartRaffle: Unable to sign Tx. Signer is not present.')
+			}
+			try {			
+				const { address } = (await signer.getAccounts())[0]; 
+				const signingClient = await SigningStargateClient.connectWithSigner(addr,signer,{registry, prefix});
+				let msg = this.msgStartRaffle({ value: MsgStartRaffle.fromPartial(value) })
+				return await signingClient.signAndBroadcast(address, [msg], fee ? fee : defaultFee, memo)
+			} catch (e: any) {
+				throw new Error('TxClient:sendMsgStartRaffle: Could not broadcast Tx: '+ e.message)
+			}
+		},
+		
+		
+		msgJoinRaffle({ value }: msgJoinRaffleParams): EncodeObject {
+			try {
+				return { typeUrl: "/bze.burner.v1.MsgJoinRaffle", value: MsgJoinRaffle.fromPartial( value ) }  
+			} catch (e: any) {
+				throw new Error('TxClient:MsgJoinRaffle: Could not create message: ' + e.message)
+			}
+		},
 		
 		msgFundBurner({ value }: msgFundBurnerParams): EncodeObject {
 			try {
 				return { typeUrl: "/bze.burner.v1.MsgFundBurner", value: MsgFundBurner.fromPartial( value ) }  
 			} catch (e: any) {
 				throw new Error('TxClient:MsgFundBurner: Could not create message: ' + e.message)
+			}
+		},
+		
+		msgStartRaffle({ value }: msgStartRaffleParams): EncodeObject {
+			try {
+				return { typeUrl: "/bze.burner.v1.MsgStartRaffle", value: MsgStartRaffle.fromPartial( value ) }  
+			} catch (e: any) {
+				throw new Error('TxClient:MsgStartRaffle: Could not create message: ' + e.message)
 			}
 		},
 		

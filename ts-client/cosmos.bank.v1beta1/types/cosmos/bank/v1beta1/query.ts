@@ -45,6 +45,8 @@ export interface QueryAllBalancesResponse {
 /**
  * QuerySpendableBalancesRequest defines the gRPC request structure for querying
  * an account's spendable balances.
+ *
+ * Since: cosmos-sdk 0.46
  */
 export interface QuerySpendableBalancesRequest {
   /** address is the address to query spendable balances for. */
@@ -56,6 +58,8 @@ export interface QuerySpendableBalancesRequest {
 /**
  * QuerySpendableBalancesResponse defines the gRPC response structure for querying
  * an account's spendable balances.
+ *
+ * Since: cosmos-sdk 0.46
  */
 export interface QuerySpendableBalancesResponse {
   /** balances is the spendable balances of all the coins. */
@@ -142,6 +146,43 @@ export interface QueryDenomMetadataRequest {
 export interface QueryDenomMetadataResponse {
   /** metadata describes and provides all the client information for the requested token. */
   metadata: Metadata | undefined;
+}
+
+/**
+ * QueryDenomOwnersRequest defines the request type for the DenomOwners RPC query,
+ * which queries for a paginated set of all account holders of a particular
+ * denomination.
+ */
+export interface QueryDenomOwnersRequest {
+  /** denom defines the coin denomination to query all account holders for. */
+  denom: string;
+  /** pagination defines an optional pagination for the request. */
+  pagination: PageRequest | undefined;
+}
+
+/**
+ * DenomOwner defines structure representing an account that owns or holds a
+ * particular denominated token. It contains the account address and account
+ * balance of the denominated token.
+ *
+ * Since: cosmos-sdk 0.46
+ */
+export interface DenomOwner {
+  /** address defines the address that owns a particular denomination. */
+  address: string;
+  /** balance is the balance of the denominated coin for an account. */
+  balance: Coin | undefined;
+}
+
+/**
+ * QueryDenomOwnersResponse defines the RPC response of a DenomOwners RPC query.
+ *
+ * Since: cosmos-sdk 0.46
+ */
+export interface QueryDenomOwnersResponse {
+  denomOwners: DenomOwner[];
+  /** pagination defines the pagination in the response. */
+  pagination: PageResponse | undefined;
 }
 
 const baseQueryBalanceRequest: object = { address: "", denom: "" };
@@ -1355,6 +1396,268 @@ export const QueryDenomMetadataResponse = {
   },
 };
 
+const baseQueryDenomOwnersRequest: object = { denom: "" };
+
+export const QueryDenomOwnersRequest = {
+  encode(
+    message: QueryDenomOwnersRequest,
+    writer: Writer = Writer.create()
+  ): Writer {
+    if (message.denom !== "") {
+      writer.uint32(10).string(message.denom);
+    }
+    if (message.pagination !== undefined) {
+      PageRequest.encode(message.pagination, writer.uint32(18).fork()).ldelim();
+    }
+    return writer;
+  },
+
+  decode(input: Reader | Uint8Array, length?: number): QueryDenomOwnersRequest {
+    const reader = input instanceof Uint8Array ? new Reader(input) : input;
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = {
+      ...baseQueryDenomOwnersRequest,
+    } as QueryDenomOwnersRequest;
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          message.denom = reader.string();
+          break;
+        case 2:
+          message.pagination = PageRequest.decode(reader, reader.uint32());
+          break;
+        default:
+          reader.skipType(tag & 7);
+          break;
+      }
+    }
+    return message;
+  },
+
+  fromJSON(object: any): QueryDenomOwnersRequest {
+    const message = {
+      ...baseQueryDenomOwnersRequest,
+    } as QueryDenomOwnersRequest;
+    if (object.denom !== undefined && object.denom !== null) {
+      message.denom = String(object.denom);
+    } else {
+      message.denom = "";
+    }
+    if (object.pagination !== undefined && object.pagination !== null) {
+      message.pagination = PageRequest.fromJSON(object.pagination);
+    } else {
+      message.pagination = undefined;
+    }
+    return message;
+  },
+
+  toJSON(message: QueryDenomOwnersRequest): unknown {
+    const obj: any = {};
+    message.denom !== undefined && (obj.denom = message.denom);
+    message.pagination !== undefined &&
+      (obj.pagination = message.pagination
+        ? PageRequest.toJSON(message.pagination)
+        : undefined);
+    return obj;
+  },
+
+  fromPartial(
+    object: DeepPartial<QueryDenomOwnersRequest>
+  ): QueryDenomOwnersRequest {
+    const message = {
+      ...baseQueryDenomOwnersRequest,
+    } as QueryDenomOwnersRequest;
+    if (object.denom !== undefined && object.denom !== null) {
+      message.denom = object.denom;
+    } else {
+      message.denom = "";
+    }
+    if (object.pagination !== undefined && object.pagination !== null) {
+      message.pagination = PageRequest.fromPartial(object.pagination);
+    } else {
+      message.pagination = undefined;
+    }
+    return message;
+  },
+};
+
+const baseDenomOwner: object = { address: "" };
+
+export const DenomOwner = {
+  encode(message: DenomOwner, writer: Writer = Writer.create()): Writer {
+    if (message.address !== "") {
+      writer.uint32(10).string(message.address);
+    }
+    if (message.balance !== undefined) {
+      Coin.encode(message.balance, writer.uint32(18).fork()).ldelim();
+    }
+    return writer;
+  },
+
+  decode(input: Reader | Uint8Array, length?: number): DenomOwner {
+    const reader = input instanceof Uint8Array ? new Reader(input) : input;
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = { ...baseDenomOwner } as DenomOwner;
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          message.address = reader.string();
+          break;
+        case 2:
+          message.balance = Coin.decode(reader, reader.uint32());
+          break;
+        default:
+          reader.skipType(tag & 7);
+          break;
+      }
+    }
+    return message;
+  },
+
+  fromJSON(object: any): DenomOwner {
+    const message = { ...baseDenomOwner } as DenomOwner;
+    if (object.address !== undefined && object.address !== null) {
+      message.address = String(object.address);
+    } else {
+      message.address = "";
+    }
+    if (object.balance !== undefined && object.balance !== null) {
+      message.balance = Coin.fromJSON(object.balance);
+    } else {
+      message.balance = undefined;
+    }
+    return message;
+  },
+
+  toJSON(message: DenomOwner): unknown {
+    const obj: any = {};
+    message.address !== undefined && (obj.address = message.address);
+    message.balance !== undefined &&
+      (obj.balance = message.balance
+        ? Coin.toJSON(message.balance)
+        : undefined);
+    return obj;
+  },
+
+  fromPartial(object: DeepPartial<DenomOwner>): DenomOwner {
+    const message = { ...baseDenomOwner } as DenomOwner;
+    if (object.address !== undefined && object.address !== null) {
+      message.address = object.address;
+    } else {
+      message.address = "";
+    }
+    if (object.balance !== undefined && object.balance !== null) {
+      message.balance = Coin.fromPartial(object.balance);
+    } else {
+      message.balance = undefined;
+    }
+    return message;
+  },
+};
+
+const baseQueryDenomOwnersResponse: object = {};
+
+export const QueryDenomOwnersResponse = {
+  encode(
+    message: QueryDenomOwnersResponse,
+    writer: Writer = Writer.create()
+  ): Writer {
+    for (const v of message.denomOwners) {
+      DenomOwner.encode(v!, writer.uint32(10).fork()).ldelim();
+    }
+    if (message.pagination !== undefined) {
+      PageResponse.encode(
+        message.pagination,
+        writer.uint32(18).fork()
+      ).ldelim();
+    }
+    return writer;
+  },
+
+  decode(
+    input: Reader | Uint8Array,
+    length?: number
+  ): QueryDenomOwnersResponse {
+    const reader = input instanceof Uint8Array ? new Reader(input) : input;
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = {
+      ...baseQueryDenomOwnersResponse,
+    } as QueryDenomOwnersResponse;
+    message.denomOwners = [];
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          message.denomOwners.push(DenomOwner.decode(reader, reader.uint32()));
+          break;
+        case 2:
+          message.pagination = PageResponse.decode(reader, reader.uint32());
+          break;
+        default:
+          reader.skipType(tag & 7);
+          break;
+      }
+    }
+    return message;
+  },
+
+  fromJSON(object: any): QueryDenomOwnersResponse {
+    const message = {
+      ...baseQueryDenomOwnersResponse,
+    } as QueryDenomOwnersResponse;
+    message.denomOwners = [];
+    if (object.denomOwners !== undefined && object.denomOwners !== null) {
+      for (const e of object.denomOwners) {
+        message.denomOwners.push(DenomOwner.fromJSON(e));
+      }
+    }
+    if (object.pagination !== undefined && object.pagination !== null) {
+      message.pagination = PageResponse.fromJSON(object.pagination);
+    } else {
+      message.pagination = undefined;
+    }
+    return message;
+  },
+
+  toJSON(message: QueryDenomOwnersResponse): unknown {
+    const obj: any = {};
+    if (message.denomOwners) {
+      obj.denomOwners = message.denomOwners.map((e) =>
+        e ? DenomOwner.toJSON(e) : undefined
+      );
+    } else {
+      obj.denomOwners = [];
+    }
+    message.pagination !== undefined &&
+      (obj.pagination = message.pagination
+        ? PageResponse.toJSON(message.pagination)
+        : undefined);
+    return obj;
+  },
+
+  fromPartial(
+    object: DeepPartial<QueryDenomOwnersResponse>
+  ): QueryDenomOwnersResponse {
+    const message = {
+      ...baseQueryDenomOwnersResponse,
+    } as QueryDenomOwnersResponse;
+    message.denomOwners = [];
+    if (object.denomOwners !== undefined && object.denomOwners !== null) {
+      for (const e of object.denomOwners) {
+        message.denomOwners.push(DenomOwner.fromPartial(e));
+      }
+    }
+    if (object.pagination !== undefined && object.pagination !== null) {
+      message.pagination = PageResponse.fromPartial(object.pagination);
+    } else {
+      message.pagination = undefined;
+    }
+    return message;
+  },
+};
+
 /** Query defines the gRPC querier service. */
 export interface Query {
   /** Balance queries the balance of a single coin for a single account. */
@@ -1366,6 +1669,8 @@ export interface Query {
   /**
    * SpendableBalances queries the spenable balance of all coins for a single
    * account.
+   *
+   * Since: cosmos-sdk 0.46
    */
   SpendableBalances(
     request: QuerySpendableBalancesRequest
@@ -1382,10 +1687,22 @@ export interface Query {
   DenomMetadata(
     request: QueryDenomMetadataRequest
   ): Promise<QueryDenomMetadataResponse>;
-  /** DenomsMetadata queries the client metadata for all registered coin denominations. */
+  /**
+   * DenomsMetadata queries the client metadata for all registered coin
+   * denominations.
+   */
   DenomsMetadata(
     request: QueryDenomsMetadataRequest
   ): Promise<QueryDenomsMetadataResponse>;
+  /**
+   * DenomOwners queries for all account addresses that own a particular token
+   * denomination.
+   *
+   * Since: cosmos-sdk 0.46
+   */
+  DenomOwners(
+    request: QueryDenomOwnersRequest
+  ): Promise<QueryDenomOwnersResponse>;
 }
 
 export class QueryClientImpl implements Query {
@@ -1494,6 +1811,20 @@ export class QueryClientImpl implements Query {
     );
     return promise.then((data) =>
       QueryDenomsMetadataResponse.decode(new Reader(data))
+    );
+  }
+
+  DenomOwners(
+    request: QueryDenomOwnersRequest
+  ): Promise<QueryDenomOwnersResponse> {
+    const data = QueryDenomOwnersRequest.encode(request).finish();
+    const promise = this.rpc.request(
+      "cosmos.bank.v1beta1.Query",
+      "DenomOwners",
+      data
+    );
+    return promise.then((data) =>
+      QueryDenomOwnersResponse.decode(new Reader(data))
     );
   }
 }

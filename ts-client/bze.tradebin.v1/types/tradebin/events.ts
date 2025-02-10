@@ -30,6 +30,8 @@ export interface OrderExecutedEvent {
   orderType: string;
   amount: string;
   price: string;
+  maker: string;
+  taker: string;
 }
 
 export interface OrderCanceledEvent {
@@ -408,6 +410,8 @@ const baseOrderExecutedEvent: object = {
   orderType: "",
   amount: "",
   price: "",
+  maker: "",
+  taker: "",
 };
 
 export const OrderExecutedEvent = {
@@ -429,6 +433,12 @@ export const OrderExecutedEvent = {
     }
     if (message.price !== "") {
       writer.uint32(42).string(message.price);
+    }
+    if (message.maker !== "") {
+      writer.uint32(50).string(message.maker);
+    }
+    if (message.taker !== "") {
+      writer.uint32(58).string(message.taker);
     }
     return writer;
   },
@@ -454,6 +464,12 @@ export const OrderExecutedEvent = {
           break;
         case 5:
           message.price = reader.string();
+          break;
+        case 6:
+          message.maker = reader.string();
+          break;
+        case 7:
+          message.taker = reader.string();
           break;
         default:
           reader.skipType(tag & 7);
@@ -490,6 +506,16 @@ export const OrderExecutedEvent = {
     } else {
       message.price = "";
     }
+    if (object.maker !== undefined && object.maker !== null) {
+      message.maker = String(object.maker);
+    } else {
+      message.maker = "";
+    }
+    if (object.taker !== undefined && object.taker !== null) {
+      message.taker = String(object.taker);
+    } else {
+      message.taker = "";
+    }
     return message;
   },
 
@@ -500,6 +526,8 @@ export const OrderExecutedEvent = {
     message.orderType !== undefined && (obj.orderType = message.orderType);
     message.amount !== undefined && (obj.amount = message.amount);
     message.price !== undefined && (obj.price = message.price);
+    message.maker !== undefined && (obj.maker = message.maker);
+    message.taker !== undefined && (obj.taker = message.taker);
     return obj;
   },
 
@@ -529,6 +557,16 @@ export const OrderExecutedEvent = {
       message.price = object.price;
     } else {
       message.price = "";
+    }
+    if (object.maker !== undefined && object.maker !== null) {
+      message.maker = object.maker;
+    } else {
+      message.maker = "";
+    }
+    if (object.taker !== undefined && object.taker !== null) {
+      message.taker = object.taker;
+    } else {
+      message.taker = "";
     }
     return message;
   },

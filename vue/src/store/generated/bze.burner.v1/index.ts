@@ -4,10 +4,17 @@ import { BurnCoinsProposal } from "bze-alphateam-bze-client-ts/bze.burner.v1/typ
 import { BurnedCoins } from "bze-alphateam-bze-client-ts/bze.burner.v1/types"
 import { CoinsBurnedEvent } from "bze-alphateam-bze-client-ts/bze.burner.v1/types"
 import { FundBurnerEvent } from "bze-alphateam-bze-client-ts/bze.burner.v1/types"
+import { RaffleWinnerEvent } from "bze-alphateam-bze-client-ts/bze.burner.v1/types"
+import { RaffleLostEvent } from "bze-alphateam-bze-client-ts/bze.burner.v1/types"
+import { RaffleFinishedEvent } from "bze-alphateam-bze-client-ts/bze.burner.v1/types"
 import { Params } from "bze-alphateam-bze-client-ts/bze.burner.v1/types"
+import { Raffle } from "bze-alphateam-bze-client-ts/bze.burner.v1/types"
+import { RaffleDeleteHook } from "bze-alphateam-bze-client-ts/bze.burner.v1/types"
+import { RaffleWinner } from "bze-alphateam-bze-client-ts/bze.burner.v1/types"
+import { RaffleParticipant } from "bze-alphateam-bze-client-ts/bze.burner.v1/types"
 
 
-export { BurnCoinsProposal, BurnedCoins, CoinsBurnedEvent, FundBurnerEvent, Params };
+export { BurnCoinsProposal, BurnedCoins, CoinsBurnedEvent, FundBurnerEvent, RaffleWinnerEvent, RaffleLostEvent, RaffleFinishedEvent, Params, Raffle, RaffleDeleteHook, RaffleWinner, RaffleParticipant };
 
 function initClient(vuexGetters) {
 	return new Client(vuexGetters['common/env/getEnv'], vuexGetters['common/wallet/signer'])
@@ -39,6 +46,8 @@ function getStructure(template) {
 const getDefaultState = () => {
 	return {
 				Params: {},
+				Raffles: {},
+				RaffleWinners: {},
 				AllBurnedCoins: {},
 				
 				_Structure: {
@@ -46,7 +55,14 @@ const getDefaultState = () => {
 						BurnedCoins: getStructure(BurnedCoins.fromPartial({})),
 						CoinsBurnedEvent: getStructure(CoinsBurnedEvent.fromPartial({})),
 						FundBurnerEvent: getStructure(FundBurnerEvent.fromPartial({})),
+						RaffleWinnerEvent: getStructure(RaffleWinnerEvent.fromPartial({})),
+						RaffleLostEvent: getStructure(RaffleLostEvent.fromPartial({})),
+						RaffleFinishedEvent: getStructure(RaffleFinishedEvent.fromPartial({})),
 						Params: getStructure(Params.fromPartial({})),
+						Raffle: getStructure(Raffle.fromPartial({})),
+						RaffleDeleteHook: getStructure(RaffleDeleteHook.fromPartial({})),
+						RaffleWinner: getStructure(RaffleWinner.fromPartial({})),
+						RaffleParticipant: getStructure(RaffleParticipant.fromPartial({})),
 						
 		},
 		_Registry: registry,
@@ -80,6 +96,18 @@ export default {
 						(<any> params).query=null
 					}
 			return state.Params[JSON.stringify(params)] ?? {}
+		},
+				getRaffles: (state) => (params = { params: {}}) => {
+					if (!(<any> params).query) {
+						(<any> params).query=null
+					}
+			return state.Raffles[JSON.stringify(params)] ?? {}
+		},
+				getRaffleWinners: (state) => (params = { params: {}}) => {
+					if (!(<any> params).query) {
+						(<any> params).query=null
+					}
+			return state.RaffleWinners[JSON.stringify(params)] ?? {}
 		},
 				getAllBurnedCoins: (state) => (params = { params: {}}) => {
 					if (!(<any> params).query) {
@@ -148,6 +176,58 @@ export default {
 		 		
 		
 		
+		async QueryRaffles({ commit, rootGetters, getters }, { options: { subscribe, all} = { subscribe:false, all:false}, params, query=null }) {
+			try {
+				const key = params ?? {};
+				const client = initClient(rootGetters);
+				let value= (await client.BzeBurnerV1.query.queryRaffles(query ?? undefined)).data
+				
+					
+				while (all && (<any> value).pagination && (<any> value).pagination.next_key!=null) {
+					let next_values=(await client.BzeBurnerV1.query.queryRaffles({...query ?? {}, 'pagination.key':(<any> value).pagination.next_key} as any)).data
+					value = mergeResults(value, next_values);
+				}
+				commit('QUERY', { query: 'Raffles', key: { params: {...key}, query}, value })
+				if (subscribe) commit('SUBSCRIBE', { action: 'QueryRaffles', payload: { options: { all }, params: {...key},query }})
+				return getters['getRaffles']( { params: {...key}, query}) ?? {}
+			} catch (e) {
+				throw new Error('QueryClient:QueryRaffles API Node Unavailable. Could not perform query: ' + e.message)
+				
+			}
+		},
+		
+		
+		
+		
+		 		
+		
+		
+		async QueryRaffleWinners({ commit, rootGetters, getters }, { options: { subscribe, all} = { subscribe:false, all:false}, params, query=null }) {
+			try {
+				const key = params ?? {};
+				const client = initClient(rootGetters);
+				let value= (await client.BzeBurnerV1.query.queryRaffleWinners(query ?? undefined)).data
+				
+					
+				while (all && (<any> value).pagination && (<any> value).pagination.next_key!=null) {
+					let next_values=(await client.BzeBurnerV1.query.queryRaffleWinners({...query ?? {}, 'pagination.key':(<any> value).pagination.next_key} as any)).data
+					value = mergeResults(value, next_values);
+				}
+				commit('QUERY', { query: 'RaffleWinners', key: { params: {...key}, query}, value })
+				if (subscribe) commit('SUBSCRIBE', { action: 'QueryRaffleWinners', payload: { options: { all }, params: {...key},query }})
+				return getters['getRaffleWinners']( { params: {...key}, query}) ?? {}
+			} catch (e) {
+				throw new Error('QueryClient:QueryRaffleWinners API Node Unavailable. Could not perform query: ' + e.message)
+				
+			}
+		},
+		
+		
+		
+		
+		 		
+		
+		
 		async QueryAllBurnedCoins({ commit, rootGetters, getters }, { options: { subscribe, all} = { subscribe:false, all:false}, params, query=null }) {
 			try {
 				const key = params ?? {};
@@ -169,6 +249,19 @@ export default {
 		},
 		
 		
+		async sendMsgStartRaffle({ rootGetters }, { value, fee = [], memo = '' }) {
+			try {
+				const client=await initClient(rootGetters)
+				const result = await client.BzeBurnerV1.tx.sendMsgStartRaffle({ value, fee: {amount: fee, gas: "200000"}, memo })
+				return result
+			} catch (e) {
+				if (e == MissingWalletError) {
+					throw new Error('TxClient:MsgStartRaffle:Init Could not initialize signing client. Wallet is required.')
+				}else{
+					throw new Error('TxClient:MsgStartRaffle:Send Could not broadcast Tx: '+ e.message)
+				}
+			}
+		},
 		async sendMsgFundBurner({ rootGetters }, { value, fee = [], memo = '' }) {
 			try {
 				const client=await initClient(rootGetters)
@@ -182,7 +275,33 @@ export default {
 				}
 			}
 		},
+		async sendMsgJoinRaffle({ rootGetters }, { value, fee = [], memo = '' }) {
+			try {
+				const client=await initClient(rootGetters)
+				const result = await client.BzeBurnerV1.tx.sendMsgJoinRaffle({ value, fee: {amount: fee, gas: "200000"}, memo })
+				return result
+			} catch (e) {
+				if (e == MissingWalletError) {
+					throw new Error('TxClient:MsgJoinRaffle:Init Could not initialize signing client. Wallet is required.')
+				}else{
+					throw new Error('TxClient:MsgJoinRaffle:Send Could not broadcast Tx: '+ e.message)
+				}
+			}
+		},
 		
+		async MsgStartRaffle({ rootGetters }, { value }) {
+			try {
+				const client=initClient(rootGetters)
+				const msg = await client.BzeBurnerV1.tx.msgStartRaffle({value})
+				return msg
+			} catch (e) {
+				if (e == MissingWalletError) {
+					throw new Error('TxClient:MsgStartRaffle:Init Could not initialize signing client. Wallet is required.')
+				} else{
+					throw new Error('TxClient:MsgStartRaffle:Create Could not create message: ' + e.message)
+				}
+			}
+		},
 		async MsgFundBurner({ rootGetters }, { value }) {
 			try {
 				const client=initClient(rootGetters)
@@ -193,6 +312,19 @@ export default {
 					throw new Error('TxClient:MsgFundBurner:Init Could not initialize signing client. Wallet is required.')
 				} else{
 					throw new Error('TxClient:MsgFundBurner:Create Could not create message: ' + e.message)
+				}
+			}
+		},
+		async MsgJoinRaffle({ rootGetters }, { value }) {
+			try {
+				const client=initClient(rootGetters)
+				const msg = await client.BzeBurnerV1.tx.msgJoinRaffle({value})
+				return msg
+			} catch (e) {
+				if (e == MissingWalletError) {
+					throw new Error('TxClient:MsgJoinRaffle:Init Could not initialize signing client. Wallet is required.')
+				} else{
+					throw new Error('TxClient:MsgJoinRaffle:Create Could not create message: ' + e.message)
 				}
 			}
 		},

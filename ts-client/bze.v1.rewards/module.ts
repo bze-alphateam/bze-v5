@@ -7,30 +7,19 @@ import { msgTypes } from './registry';
 import { IgniteClient } from "../client"
 import { MissingWalletError } from "../helpers"
 import { Api } from "./rest";
-import { MsgCreateStakingReward } from "./types/rewards/tx";
-import { MsgCreateTradingReward } from "./types/rewards/tx";
-import { MsgJoinStaking } from "./types/rewards/tx";
+import { MsgDistributeStakingRewards } from "./types/rewards/tx";
 import { MsgUpdateStakingReward } from "./types/rewards/tx";
+import { MsgCreateStakingReward } from "./types/rewards/tx";
 import { MsgClaimStakingRewards } from "./types/rewards/tx";
+import { MsgCreateTradingReward } from "./types/rewards/tx";
 import { MsgExitStaking } from "./types/rewards/tx";
+import { MsgJoinStaking } from "./types/rewards/tx";
 
 
-export { MsgCreateStakingReward, MsgCreateTradingReward, MsgJoinStaking, MsgUpdateStakingReward, MsgClaimStakingRewards, MsgExitStaking };
+export { MsgDistributeStakingRewards, MsgUpdateStakingReward, MsgCreateStakingReward, MsgClaimStakingRewards, MsgCreateTradingReward, MsgExitStaking, MsgJoinStaking };
 
-type sendMsgCreateStakingRewardParams = {
-  value: MsgCreateStakingReward,
-  fee?: StdFee,
-  memo?: string
-};
-
-type sendMsgCreateTradingRewardParams = {
-  value: MsgCreateTradingReward,
-  fee?: StdFee,
-  memo?: string
-};
-
-type sendMsgJoinStakingParams = {
-  value: MsgJoinStaking,
+type sendMsgDistributeStakingRewardsParams = {
+  value: MsgDistributeStakingRewards,
   fee?: StdFee,
   memo?: string
 };
@@ -41,8 +30,20 @@ type sendMsgUpdateStakingRewardParams = {
   memo?: string
 };
 
+type sendMsgCreateStakingRewardParams = {
+  value: MsgCreateStakingReward,
+  fee?: StdFee,
+  memo?: string
+};
+
 type sendMsgClaimStakingRewardsParams = {
   value: MsgClaimStakingRewards,
+  fee?: StdFee,
+  memo?: string
+};
+
+type sendMsgCreateTradingRewardParams = {
+  value: MsgCreateTradingReward,
   fee?: StdFee,
   memo?: string
 };
@@ -53,29 +54,39 @@ type sendMsgExitStakingParams = {
   memo?: string
 };
 
-
-type msgCreateStakingRewardParams = {
-  value: MsgCreateStakingReward,
-};
-
-type msgCreateTradingRewardParams = {
-  value: MsgCreateTradingReward,
-};
-
-type msgJoinStakingParams = {
+type sendMsgJoinStakingParams = {
   value: MsgJoinStaking,
+  fee?: StdFee,
+  memo?: string
+};
+
+
+type msgDistributeStakingRewardsParams = {
+  value: MsgDistributeStakingRewards,
 };
 
 type msgUpdateStakingRewardParams = {
   value: MsgUpdateStakingReward,
 };
 
+type msgCreateStakingRewardParams = {
+  value: MsgCreateStakingReward,
+};
+
 type msgClaimStakingRewardsParams = {
   value: MsgClaimStakingRewards,
 };
 
+type msgCreateTradingRewardParams = {
+  value: MsgCreateTradingReward,
+};
+
 type msgExitStakingParams = {
   value: MsgExitStaking,
+};
+
+type msgJoinStakingParams = {
+  value: MsgJoinStaking,
 };
 
 
@@ -96,45 +107,17 @@ export const txClient = ({ signer, prefix, addr }: TxClientOptions = { addr: "ht
 
   return {
 		
-		async sendMsgCreateStakingReward({ value, fee, memo }: sendMsgCreateStakingRewardParams): Promise<DeliverTxResponse> {
+		async sendMsgDistributeStakingRewards({ value, fee, memo }: sendMsgDistributeStakingRewardsParams): Promise<DeliverTxResponse> {
 			if (!signer) {
-					throw new Error('TxClient:sendMsgCreateStakingReward: Unable to sign Tx. Signer is not present.')
+					throw new Error('TxClient:sendMsgDistributeStakingRewards: Unable to sign Tx. Signer is not present.')
 			}
 			try {			
 				const { address } = (await signer.getAccounts())[0]; 
 				const signingClient = await SigningStargateClient.connectWithSigner(addr,signer,{registry, prefix});
-				let msg = this.msgCreateStakingReward({ value: MsgCreateStakingReward.fromPartial(value) })
+				let msg = this.msgDistributeStakingRewards({ value: MsgDistributeStakingRewards.fromPartial(value) })
 				return await signingClient.signAndBroadcast(address, [msg], fee ? fee : defaultFee, memo)
 			} catch (e: any) {
-				throw new Error('TxClient:sendMsgCreateStakingReward: Could not broadcast Tx: '+ e.message)
-			}
-		},
-		
-		async sendMsgCreateTradingReward({ value, fee, memo }: sendMsgCreateTradingRewardParams): Promise<DeliverTxResponse> {
-			if (!signer) {
-					throw new Error('TxClient:sendMsgCreateTradingReward: Unable to sign Tx. Signer is not present.')
-			}
-			try {			
-				const { address } = (await signer.getAccounts())[0]; 
-				const signingClient = await SigningStargateClient.connectWithSigner(addr,signer,{registry, prefix});
-				let msg = this.msgCreateTradingReward({ value: MsgCreateTradingReward.fromPartial(value) })
-				return await signingClient.signAndBroadcast(address, [msg], fee ? fee : defaultFee, memo)
-			} catch (e: any) {
-				throw new Error('TxClient:sendMsgCreateTradingReward: Could not broadcast Tx: '+ e.message)
-			}
-		},
-		
-		async sendMsgJoinStaking({ value, fee, memo }: sendMsgJoinStakingParams): Promise<DeliverTxResponse> {
-			if (!signer) {
-					throw new Error('TxClient:sendMsgJoinStaking: Unable to sign Tx. Signer is not present.')
-			}
-			try {			
-				const { address } = (await signer.getAccounts())[0]; 
-				const signingClient = await SigningStargateClient.connectWithSigner(addr,signer,{registry, prefix});
-				let msg = this.msgJoinStaking({ value: MsgJoinStaking.fromPartial(value) })
-				return await signingClient.signAndBroadcast(address, [msg], fee ? fee : defaultFee, memo)
-			} catch (e: any) {
-				throw new Error('TxClient:sendMsgJoinStaking: Could not broadcast Tx: '+ e.message)
+				throw new Error('TxClient:sendMsgDistributeStakingRewards: Could not broadcast Tx: '+ e.message)
 			}
 		},
 		
@@ -152,6 +135,20 @@ export const txClient = ({ signer, prefix, addr }: TxClientOptions = { addr: "ht
 			}
 		},
 		
+		async sendMsgCreateStakingReward({ value, fee, memo }: sendMsgCreateStakingRewardParams): Promise<DeliverTxResponse> {
+			if (!signer) {
+					throw new Error('TxClient:sendMsgCreateStakingReward: Unable to sign Tx. Signer is not present.')
+			}
+			try {			
+				const { address } = (await signer.getAccounts())[0]; 
+				const signingClient = await SigningStargateClient.connectWithSigner(addr,signer,{registry, prefix});
+				let msg = this.msgCreateStakingReward({ value: MsgCreateStakingReward.fromPartial(value) })
+				return await signingClient.signAndBroadcast(address, [msg], fee ? fee : defaultFee, memo)
+			} catch (e: any) {
+				throw new Error('TxClient:sendMsgCreateStakingReward: Could not broadcast Tx: '+ e.message)
+			}
+		},
+		
 		async sendMsgClaimStakingRewards({ value, fee, memo }: sendMsgClaimStakingRewardsParams): Promise<DeliverTxResponse> {
 			if (!signer) {
 					throw new Error('TxClient:sendMsgClaimStakingRewards: Unable to sign Tx. Signer is not present.')
@@ -163,6 +160,20 @@ export const txClient = ({ signer, prefix, addr }: TxClientOptions = { addr: "ht
 				return await signingClient.signAndBroadcast(address, [msg], fee ? fee : defaultFee, memo)
 			} catch (e: any) {
 				throw new Error('TxClient:sendMsgClaimStakingRewards: Could not broadcast Tx: '+ e.message)
+			}
+		},
+		
+		async sendMsgCreateTradingReward({ value, fee, memo }: sendMsgCreateTradingRewardParams): Promise<DeliverTxResponse> {
+			if (!signer) {
+					throw new Error('TxClient:sendMsgCreateTradingReward: Unable to sign Tx. Signer is not present.')
+			}
+			try {			
+				const { address } = (await signer.getAccounts())[0]; 
+				const signingClient = await SigningStargateClient.connectWithSigner(addr,signer,{registry, prefix});
+				let msg = this.msgCreateTradingReward({ value: MsgCreateTradingReward.fromPartial(value) })
+				return await signingClient.signAndBroadcast(address, [msg], fee ? fee : defaultFee, memo)
+			} catch (e: any) {
+				throw new Error('TxClient:sendMsgCreateTradingReward: Could not broadcast Tx: '+ e.message)
 			}
 		},
 		
@@ -180,28 +191,26 @@ export const txClient = ({ signer, prefix, addr }: TxClientOptions = { addr: "ht
 			}
 		},
 		
-		
-		msgCreateStakingReward({ value }: msgCreateStakingRewardParams): EncodeObject {
-			try {
-				return { typeUrl: "/bze.v1.rewards.MsgCreateStakingReward", value: MsgCreateStakingReward.fromPartial( value ) }  
+		async sendMsgJoinStaking({ value, fee, memo }: sendMsgJoinStakingParams): Promise<DeliverTxResponse> {
+			if (!signer) {
+					throw new Error('TxClient:sendMsgJoinStaking: Unable to sign Tx. Signer is not present.')
+			}
+			try {			
+				const { address } = (await signer.getAccounts())[0]; 
+				const signingClient = await SigningStargateClient.connectWithSigner(addr,signer,{registry, prefix});
+				let msg = this.msgJoinStaking({ value: MsgJoinStaking.fromPartial(value) })
+				return await signingClient.signAndBroadcast(address, [msg], fee ? fee : defaultFee, memo)
 			} catch (e: any) {
-				throw new Error('TxClient:MsgCreateStakingReward: Could not create message: ' + e.message)
+				throw new Error('TxClient:sendMsgJoinStaking: Could not broadcast Tx: '+ e.message)
 			}
 		},
 		
-		msgCreateTradingReward({ value }: msgCreateTradingRewardParams): EncodeObject {
-			try {
-				return { typeUrl: "/bze.v1.rewards.MsgCreateTradingReward", value: MsgCreateTradingReward.fromPartial( value ) }  
-			} catch (e: any) {
-				throw new Error('TxClient:MsgCreateTradingReward: Could not create message: ' + e.message)
-			}
-		},
 		
-		msgJoinStaking({ value }: msgJoinStakingParams): EncodeObject {
+		msgDistributeStakingRewards({ value }: msgDistributeStakingRewardsParams): EncodeObject {
 			try {
-				return { typeUrl: "/bze.v1.rewards.MsgJoinStaking", value: MsgJoinStaking.fromPartial( value ) }  
+				return { typeUrl: "/bze.v1.rewards.MsgDistributeStakingRewards", value: MsgDistributeStakingRewards.fromPartial( value ) }  
 			} catch (e: any) {
-				throw new Error('TxClient:MsgJoinStaking: Could not create message: ' + e.message)
+				throw new Error('TxClient:MsgDistributeStakingRewards: Could not create message: ' + e.message)
 			}
 		},
 		
@@ -213,6 +222,14 @@ export const txClient = ({ signer, prefix, addr }: TxClientOptions = { addr: "ht
 			}
 		},
 		
+		msgCreateStakingReward({ value }: msgCreateStakingRewardParams): EncodeObject {
+			try {
+				return { typeUrl: "/bze.v1.rewards.MsgCreateStakingReward", value: MsgCreateStakingReward.fromPartial( value ) }  
+			} catch (e: any) {
+				throw new Error('TxClient:MsgCreateStakingReward: Could not create message: ' + e.message)
+			}
+		},
+		
 		msgClaimStakingRewards({ value }: msgClaimStakingRewardsParams): EncodeObject {
 			try {
 				return { typeUrl: "/bze.v1.rewards.MsgClaimStakingRewards", value: MsgClaimStakingRewards.fromPartial( value ) }  
@@ -221,11 +238,27 @@ export const txClient = ({ signer, prefix, addr }: TxClientOptions = { addr: "ht
 			}
 		},
 		
+		msgCreateTradingReward({ value }: msgCreateTradingRewardParams): EncodeObject {
+			try {
+				return { typeUrl: "/bze.v1.rewards.MsgCreateTradingReward", value: MsgCreateTradingReward.fromPartial( value ) }  
+			} catch (e: any) {
+				throw new Error('TxClient:MsgCreateTradingReward: Could not create message: ' + e.message)
+			}
+		},
+		
 		msgExitStaking({ value }: msgExitStakingParams): EncodeObject {
 			try {
 				return { typeUrl: "/bze.v1.rewards.MsgExitStaking", value: MsgExitStaking.fromPartial( value ) }  
 			} catch (e: any) {
 				throw new Error('TxClient:MsgExitStaking: Could not create message: ' + e.message)
+			}
+		},
+		
+		msgJoinStaking({ value }: msgJoinStakingParams): EncodeObject {
+			try {
+				return { typeUrl: "/bze.v1.rewards.MsgJoinStaking", value: MsgJoinStaking.fromPartial( value ) }  
+			} catch (e: any) {
+				throw new Error('TxClient:MsgJoinStaking: Could not create message: ' + e.message)
 			}
 		},
 		

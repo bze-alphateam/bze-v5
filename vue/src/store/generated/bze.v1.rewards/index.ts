@@ -1,5 +1,6 @@
 import { Client, registry, MissingWalletError } from 'bze-alphateam-bze-client-ts'
 
+import { ActivateTradingRewardProposal } from "bze-alphateam-bze-client-ts/bze.v1.rewards/types"
 import { Params } from "bze-alphateam-bze-client-ts/bze.v1.rewards/types"
 import { StakingReward } from "bze-alphateam-bze-client-ts/bze.v1.rewards/types"
 import { StakingRewardParticipant } from "bze-alphateam-bze-client-ts/bze.v1.rewards/types"
@@ -12,7 +13,7 @@ import { TradingRewardCandidate } from "bze-alphateam-bze-client-ts/bze.v1.rewar
 import { MarketIdTradingRewardId } from "bze-alphateam-bze-client-ts/bze.v1.rewards/types"
 
 
-export { Params, StakingReward, StakingRewardParticipant, PendingUnlockParticipant, TradingReward, TradingRewardExpiration, TradingRewardLeaderboard, TradingRewardLeaderboardEntry, TradingRewardCandidate, MarketIdTradingRewardId };
+export { ActivateTradingRewardProposal, Params, StakingReward, StakingRewardParticipant, PendingUnlockParticipant, TradingReward, TradingRewardExpiration, TradingRewardLeaderboard, TradingRewardLeaderboardEntry, TradingRewardCandidate, MarketIdTradingRewardId };
 
 function initClient(vuexGetters) {
 	return new Client(vuexGetters['common/env/getEnv'], vuexGetters['common/wallet/signer'])
@@ -50,8 +51,12 @@ const getDefaultState = () => {
 				TradingRewardAll: {},
 				StakingRewardParticipant: {},
 				StakingRewardParticipantAll: {},
+				GetTradingRewardLeaderboardHandler: {},
+				GetMarketIdTradingRewardIdHandler: {},
+				AllPendingUnlockParticipant: {},
 				
 				_Structure: {
+						ActivateTradingRewardProposal: getStructure(ActivateTradingRewardProposal.fromPartial({})),
 						Params: getStructure(Params.fromPartial({})),
 						StakingReward: getStructure(StakingReward.fromPartial({})),
 						StakingRewardParticipant: getStructure(StakingRewardParticipant.fromPartial({})),
@@ -131,6 +136,24 @@ export default {
 						(<any> params).query=null
 					}
 			return state.StakingRewardParticipantAll[JSON.stringify(params)] ?? {}
+		},
+				getGetTradingRewardLeaderboardHandler: (state) => (params = { params: {}}) => {
+					if (!(<any> params).query) {
+						(<any> params).query=null
+					}
+			return state.GetTradingRewardLeaderboardHandler[JSON.stringify(params)] ?? {}
+		},
+				getGetMarketIdTradingRewardIdHandler: (state) => (params = { params: {}}) => {
+					if (!(<any> params).query) {
+						(<any> params).query=null
+					}
+			return state.GetMarketIdTradingRewardIdHandler[JSON.stringify(params)] ?? {}
+		},
+				getAllPendingUnlockParticipant: (state) => (params = { params: {}}) => {
+					if (!(<any> params).query) {
+						(<any> params).query=null
+					}
+			return state.AllPendingUnlockParticipant[JSON.stringify(params)] ?? {}
 		},
 				
 		getTypeStructure: (state) => (type) => {
@@ -267,11 +290,11 @@ export default {
 			try {
 				const key = params ?? {};
 				const client = initClient(rootGetters);
-				let value= (await client.BzeV1Rewards.query.queryTradingRewardAll(query ?? undefined)).data
+				let value= (await client.BzeV1Rewards.query.queryTradingRewardAll( key.state, query ?? undefined)).data
 				
 					
 				while (all && (<any> value).pagination && (<any> value).pagination.next_key!=null) {
-					let next_values=(await client.BzeV1Rewards.query.queryTradingRewardAll({...query ?? {}, 'pagination.key':(<any> value).pagination.next_key} as any)).data
+					let next_values=(await client.BzeV1Rewards.query.queryTradingRewardAll( key.state, {...query ?? {}, 'pagination.key':(<any> value).pagination.next_key} as any)).data
 					value = mergeResults(value, next_values);
 				}
 				commit('QUERY', { query: 'TradingRewardAll', key: { params: {...key}, query}, value })
@@ -336,42 +359,90 @@ export default {
 		},
 		
 		
-		async sendMsgExitStaking({ rootGetters }, { value, fee = [], memo = '' }) {
+		
+		
+		 		
+		
+		
+		async QueryGetTradingRewardLeaderboardHandler({ commit, rootGetters, getters }, { options: { subscribe, all} = { subscribe:false, all:false}, params, query=null }) {
 			try {
-				const client=await initClient(rootGetters)
-				const result = await client.BzeV1Rewards.tx.sendMsgExitStaking({ value, fee: {amount: fee, gas: "200000"}, memo })
-				return result
+				const key = params ?? {};
+				const client = initClient(rootGetters);
+				let value= (await client.BzeV1Rewards.query.queryGetTradingRewardLeaderboardHandler( key.reward_id)).data
+				
+					
+				commit('QUERY', { query: 'GetTradingRewardLeaderboardHandler', key: { params: {...key}, query}, value })
+				if (subscribe) commit('SUBSCRIBE', { action: 'QueryGetTradingRewardLeaderboardHandler', payload: { options: { all }, params: {...key},query }})
+				return getters['getGetTradingRewardLeaderboardHandler']( { params: {...key}, query}) ?? {}
 			} catch (e) {
-				if (e == MissingWalletError) {
-					throw new Error('TxClient:MsgExitStaking:Init Could not initialize signing client. Wallet is required.')
-				}else{
-					throw new Error('TxClient:MsgExitStaking:Send Could not broadcast Tx: '+ e.message)
-				}
+				throw new Error('QueryClient:QueryGetTradingRewardLeaderboardHandler API Node Unavailable. Could not perform query: ' + e.message)
+				
 			}
 		},
-		async sendMsgUpdateStakingReward({ rootGetters }, { value, fee = [], memo = '' }) {
+		
+		
+		
+		
+		 		
+		
+		
+		async QueryGetMarketIdTradingRewardIdHandler({ commit, rootGetters, getters }, { options: { subscribe, all} = { subscribe:false, all:false}, params, query=null }) {
 			try {
-				const client=await initClient(rootGetters)
-				const result = await client.BzeV1Rewards.tx.sendMsgUpdateStakingReward({ value, fee: {amount: fee, gas: "200000"}, memo })
-				return result
-			} catch (e) {
-				if (e == MissingWalletError) {
-					throw new Error('TxClient:MsgUpdateStakingReward:Init Could not initialize signing client. Wallet is required.')
-				}else{
-					throw new Error('TxClient:MsgUpdateStakingReward:Send Could not broadcast Tx: '+ e.message)
+				const key = params ?? {};
+				const client = initClient(rootGetters);
+				let value= (await client.BzeV1Rewards.query.queryGetMarketIdTradingRewardIdHandler(query ?? undefined)).data
+				
+					
+				while (all && (<any> value).pagination && (<any> value).pagination.next_key!=null) {
+					let next_values=(await client.BzeV1Rewards.query.queryGetMarketIdTradingRewardIdHandler({...query ?? {}, 'pagination.key':(<any> value).pagination.next_key} as any)).data
+					value = mergeResults(value, next_values);
 				}
+				commit('QUERY', { query: 'GetMarketIdTradingRewardIdHandler', key: { params: {...key}, query}, value })
+				if (subscribe) commit('SUBSCRIBE', { action: 'QueryGetMarketIdTradingRewardIdHandler', payload: { options: { all }, params: {...key},query }})
+				return getters['getGetMarketIdTradingRewardIdHandler']( { params: {...key}, query}) ?? {}
+			} catch (e) {
+				throw new Error('QueryClient:QueryGetMarketIdTradingRewardIdHandler API Node Unavailable. Could not perform query: ' + e.message)
+				
 			}
 		},
-		async sendMsgCreateStakingReward({ rootGetters }, { value, fee = [], memo = '' }) {
+		
+		
+		
+		
+		 		
+		
+		
+		async QueryAllPendingUnlockParticipant({ commit, rootGetters, getters }, { options: { subscribe, all} = { subscribe:false, all:false}, params, query=null }) {
+			try {
+				const key = params ?? {};
+				const client = initClient(rootGetters);
+				let value= (await client.BzeV1Rewards.query.queryAllPendingUnlockParticipant(query ?? undefined)).data
+				
+					
+				while (all && (<any> value).pagination && (<any> value).pagination.next_key!=null) {
+					let next_values=(await client.BzeV1Rewards.query.queryAllPendingUnlockParticipant({...query ?? {}, 'pagination.key':(<any> value).pagination.next_key} as any)).data
+					value = mergeResults(value, next_values);
+				}
+				commit('QUERY', { query: 'AllPendingUnlockParticipant', key: { params: {...key}, query}, value })
+				if (subscribe) commit('SUBSCRIBE', { action: 'QueryAllPendingUnlockParticipant', payload: { options: { all }, params: {...key},query }})
+				return getters['getAllPendingUnlockParticipant']( { params: {...key}, query}) ?? {}
+			} catch (e) {
+				throw new Error('QueryClient:QueryAllPendingUnlockParticipant API Node Unavailable. Could not perform query: ' + e.message)
+				
+			}
+		},
+		
+		
+		async sendMsgDistributeStakingRewards({ rootGetters }, { value, fee = [], memo = '' }) {
 			try {
 				const client=await initClient(rootGetters)
-				const result = await client.BzeV1Rewards.tx.sendMsgCreateStakingReward({ value, fee: {amount: fee, gas: "200000"}, memo })
+				const result = await client.BzeV1Rewards.tx.sendMsgDistributeStakingRewards({ value, fee: {amount: fee, gas: "200000"}, memo })
 				return result
 			} catch (e) {
 				if (e == MissingWalletError) {
-					throw new Error('TxClient:MsgCreateStakingReward:Init Could not initialize signing client. Wallet is required.')
+					throw new Error('TxClient:MsgDistributeStakingRewards:Init Could not initialize signing client. Wallet is required.')
 				}else{
-					throw new Error('TxClient:MsgCreateStakingReward:Send Could not broadcast Tx: '+ e.message)
+					throw new Error('TxClient:MsgDistributeStakingRewards:Send Could not broadcast Tx: '+ e.message)
 				}
 			}
 		},
@@ -388,16 +459,29 @@ export default {
 				}
 			}
 		},
-		async sendMsgClaimStakingRewards({ rootGetters }, { value, fee = [], memo = '' }) {
+		async sendMsgUpdateStakingReward({ rootGetters }, { value, fee = [], memo = '' }) {
 			try {
 				const client=await initClient(rootGetters)
-				const result = await client.BzeV1Rewards.tx.sendMsgClaimStakingRewards({ value, fee: {amount: fee, gas: "200000"}, memo })
+				const result = await client.BzeV1Rewards.tx.sendMsgUpdateStakingReward({ value, fee: {amount: fee, gas: "200000"}, memo })
 				return result
 			} catch (e) {
 				if (e == MissingWalletError) {
-					throw new Error('TxClient:MsgClaimStakingRewards:Init Could not initialize signing client. Wallet is required.')
+					throw new Error('TxClient:MsgUpdateStakingReward:Init Could not initialize signing client. Wallet is required.')
 				}else{
-					throw new Error('TxClient:MsgClaimStakingRewards:Send Could not broadcast Tx: '+ e.message)
+					throw new Error('TxClient:MsgUpdateStakingReward:Send Could not broadcast Tx: '+ e.message)
+				}
+			}
+		},
+		async sendMsgExitStaking({ rootGetters }, { value, fee = [], memo = '' }) {
+			try {
+				const client=await initClient(rootGetters)
+				const result = await client.BzeV1Rewards.tx.sendMsgExitStaking({ value, fee: {amount: fee, gas: "200000"}, memo })
+				return result
+			} catch (e) {
+				if (e == MissingWalletError) {
+					throw new Error('TxClient:MsgExitStaking:Init Could not initialize signing client. Wallet is required.')
+				}else{
+					throw new Error('TxClient:MsgExitStaking:Send Could not broadcast Tx: '+ e.message)
 				}
 			}
 		},
@@ -414,43 +498,43 @@ export default {
 				}
 			}
 		},
-		
-		async MsgExitStaking({ rootGetters }, { value }) {
+		async sendMsgClaimStakingRewards({ rootGetters }, { value, fee = [], memo = '' }) {
 			try {
-				const client=initClient(rootGetters)
-				const msg = await client.BzeV1Rewards.tx.msgExitStaking({value})
-				return msg
+				const client=await initClient(rootGetters)
+				const result = await client.BzeV1Rewards.tx.sendMsgClaimStakingRewards({ value, fee: {amount: fee, gas: "200000"}, memo })
+				return result
 			} catch (e) {
 				if (e == MissingWalletError) {
-					throw new Error('TxClient:MsgExitStaking:Init Could not initialize signing client. Wallet is required.')
-				} else{
-					throw new Error('TxClient:MsgExitStaking:Create Could not create message: ' + e.message)
+					throw new Error('TxClient:MsgClaimStakingRewards:Init Could not initialize signing client. Wallet is required.')
+				}else{
+					throw new Error('TxClient:MsgClaimStakingRewards:Send Could not broadcast Tx: '+ e.message)
 				}
 			}
 		},
-		async MsgUpdateStakingReward({ rootGetters }, { value }) {
+		async sendMsgCreateStakingReward({ rootGetters }, { value, fee = [], memo = '' }) {
 			try {
-				const client=initClient(rootGetters)
-				const msg = await client.BzeV1Rewards.tx.msgUpdateStakingReward({value})
-				return msg
-			} catch (e) {
-				if (e == MissingWalletError) {
-					throw new Error('TxClient:MsgUpdateStakingReward:Init Could not initialize signing client. Wallet is required.')
-				} else{
-					throw new Error('TxClient:MsgUpdateStakingReward:Create Could not create message: ' + e.message)
-				}
-			}
-		},
-		async MsgCreateStakingReward({ rootGetters }, { value }) {
-			try {
-				const client=initClient(rootGetters)
-				const msg = await client.BzeV1Rewards.tx.msgCreateStakingReward({value})
-				return msg
+				const client=await initClient(rootGetters)
+				const result = await client.BzeV1Rewards.tx.sendMsgCreateStakingReward({ value, fee: {amount: fee, gas: "200000"}, memo })
+				return result
 			} catch (e) {
 				if (e == MissingWalletError) {
 					throw new Error('TxClient:MsgCreateStakingReward:Init Could not initialize signing client. Wallet is required.')
+				}else{
+					throw new Error('TxClient:MsgCreateStakingReward:Send Could not broadcast Tx: '+ e.message)
+				}
+			}
+		},
+		
+		async MsgDistributeStakingRewards({ rootGetters }, { value }) {
+			try {
+				const client=initClient(rootGetters)
+				const msg = await client.BzeV1Rewards.tx.msgDistributeStakingRewards({value})
+				return msg
+			} catch (e) {
+				if (e == MissingWalletError) {
+					throw new Error('TxClient:MsgDistributeStakingRewards:Init Could not initialize signing client. Wallet is required.')
 				} else{
-					throw new Error('TxClient:MsgCreateStakingReward:Create Could not create message: ' + e.message)
+					throw new Error('TxClient:MsgDistributeStakingRewards:Create Could not create message: ' + e.message)
 				}
 			}
 		},
@@ -467,16 +551,29 @@ export default {
 				}
 			}
 		},
-		async MsgClaimStakingRewards({ rootGetters }, { value }) {
+		async MsgUpdateStakingReward({ rootGetters }, { value }) {
 			try {
 				const client=initClient(rootGetters)
-				const msg = await client.BzeV1Rewards.tx.msgClaimStakingRewards({value})
+				const msg = await client.BzeV1Rewards.tx.msgUpdateStakingReward({value})
 				return msg
 			} catch (e) {
 				if (e == MissingWalletError) {
-					throw new Error('TxClient:MsgClaimStakingRewards:Init Could not initialize signing client. Wallet is required.')
+					throw new Error('TxClient:MsgUpdateStakingReward:Init Could not initialize signing client. Wallet is required.')
 				} else{
-					throw new Error('TxClient:MsgClaimStakingRewards:Create Could not create message: ' + e.message)
+					throw new Error('TxClient:MsgUpdateStakingReward:Create Could not create message: ' + e.message)
+				}
+			}
+		},
+		async MsgExitStaking({ rootGetters }, { value }) {
+			try {
+				const client=initClient(rootGetters)
+				const msg = await client.BzeV1Rewards.tx.msgExitStaking({value})
+				return msg
+			} catch (e) {
+				if (e == MissingWalletError) {
+					throw new Error('TxClient:MsgExitStaking:Init Could not initialize signing client. Wallet is required.')
+				} else{
+					throw new Error('TxClient:MsgExitStaking:Create Could not create message: ' + e.message)
 				}
 			}
 		},
@@ -490,6 +587,32 @@ export default {
 					throw new Error('TxClient:MsgCreateTradingReward:Init Could not initialize signing client. Wallet is required.')
 				} else{
 					throw new Error('TxClient:MsgCreateTradingReward:Create Could not create message: ' + e.message)
+				}
+			}
+		},
+		async MsgClaimStakingRewards({ rootGetters }, { value }) {
+			try {
+				const client=initClient(rootGetters)
+				const msg = await client.BzeV1Rewards.tx.msgClaimStakingRewards({value})
+				return msg
+			} catch (e) {
+				if (e == MissingWalletError) {
+					throw new Error('TxClient:MsgClaimStakingRewards:Init Could not initialize signing client. Wallet is required.')
+				} else{
+					throw new Error('TxClient:MsgClaimStakingRewards:Create Could not create message: ' + e.message)
+				}
+			}
+		},
+		async MsgCreateStakingReward({ rootGetters }, { value }) {
+			try {
+				const client=initClient(rootGetters)
+				const msg = await client.BzeV1Rewards.tx.msgCreateStakingReward({value})
+				return msg
+			} catch (e) {
+				if (e == MissingWalletError) {
+					throw new Error('TxClient:MsgCreateStakingReward:Init Could not initialize signing client. Wallet is required.')
+				} else{
+					throw new Error('TxClient:MsgCreateStakingReward:Create Could not create message: ' + e.message)
 				}
 			}
 		},

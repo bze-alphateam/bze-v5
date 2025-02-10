@@ -6,8 +6,15 @@ import {
   PageRequest,
   PageResponse,
 } from "../cosmos/base/query/v1beta1/pagination";
-import { TradingReward } from "../rewards/trading_reward";
-import { StakingRewardParticipant } from "../rewards/staking_reward_participant";
+import {
+  TradingReward,
+  TradingRewardLeaderboard,
+  MarketIdTradingRewardId,
+} from "../rewards/trading_reward";
+import {
+  StakingRewardParticipant,
+  PendingUnlockParticipant,
+} from "../rewards/staking_reward_participant";
 
 export const protobufPackage = "bze.v1.rewards";
 
@@ -46,6 +53,7 @@ export interface QueryGetTradingRewardResponse {
 }
 
 export interface QueryAllTradingRewardRequest {
+  state: string;
   pagination: PageRequest | undefined;
 }
 
@@ -70,6 +78,31 @@ export interface QueryAllStakingRewardParticipantRequest {
 
 export interface QueryAllStakingRewardParticipantResponse {
   list: StakingRewardParticipant[];
+  pagination: PageResponse | undefined;
+}
+
+export interface QueryGetTradingRewardLeaderboardRequest {
+  rewardId: string;
+}
+
+export interface QueryGetTradingRewardLeaderboardResponse {
+  leaderboard: TradingRewardLeaderboard | undefined;
+}
+
+export interface QueryGetMarketIdTradingRewardIdHandlerRequest {
+  marketId: string;
+}
+
+export interface QueryGetMarketIdTradingRewardIdHandlerResponse {
+  marketIdRewardId: MarketIdTradingRewardId | undefined;
+}
+
+export interface QueryAllPendingUnlockParticipantRequest {
+  pagination: PageRequest | undefined;
+}
+
+export interface QueryAllPendingUnlockParticipantResponse {
+  list: PendingUnlockParticipant[];
   pagination: PageResponse | undefined;
 }
 
@@ -631,15 +664,18 @@ export const QueryGetTradingRewardResponse = {
   },
 };
 
-const baseQueryAllTradingRewardRequest: object = {};
+const baseQueryAllTradingRewardRequest: object = { state: "" };
 
 export const QueryAllTradingRewardRequest = {
   encode(
     message: QueryAllTradingRewardRequest,
     writer: Writer = Writer.create()
   ): Writer {
+    if (message.state !== "") {
+      writer.uint32(10).string(message.state);
+    }
     if (message.pagination !== undefined) {
-      PageRequest.encode(message.pagination, writer.uint32(10).fork()).ldelim();
+      PageRequest.encode(message.pagination, writer.uint32(18).fork()).ldelim();
     }
     return writer;
   },
@@ -657,6 +693,9 @@ export const QueryAllTradingRewardRequest = {
       const tag = reader.uint32();
       switch (tag >>> 3) {
         case 1:
+          message.state = reader.string();
+          break;
+        case 2:
           message.pagination = PageRequest.decode(reader, reader.uint32());
           break;
         default:
@@ -671,6 +710,11 @@ export const QueryAllTradingRewardRequest = {
     const message = {
       ...baseQueryAllTradingRewardRequest,
     } as QueryAllTradingRewardRequest;
+    if (object.state !== undefined && object.state !== null) {
+      message.state = String(object.state);
+    } else {
+      message.state = "";
+    }
     if (object.pagination !== undefined && object.pagination !== null) {
       message.pagination = PageRequest.fromJSON(object.pagination);
     } else {
@@ -681,6 +725,7 @@ export const QueryAllTradingRewardRequest = {
 
   toJSON(message: QueryAllTradingRewardRequest): unknown {
     const obj: any = {};
+    message.state !== undefined && (obj.state = message.state);
     message.pagination !== undefined &&
       (obj.pagination = message.pagination
         ? PageRequest.toJSON(message.pagination)
@@ -694,6 +739,11 @@ export const QueryAllTradingRewardRequest = {
     const message = {
       ...baseQueryAllTradingRewardRequest,
     } as QueryAllTradingRewardRequest;
+    if (object.state !== undefined && object.state !== null) {
+      message.state = object.state;
+    } else {
+      message.state = "";
+    }
     if (object.pagination !== undefined && object.pagination !== null) {
       message.pagination = PageRequest.fromPartial(object.pagination);
     } else {
@@ -1171,6 +1221,491 @@ export const QueryAllStakingRewardParticipantResponse = {
   },
 };
 
+const baseQueryGetTradingRewardLeaderboardRequest: object = { rewardId: "" };
+
+export const QueryGetTradingRewardLeaderboardRequest = {
+  encode(
+    message: QueryGetTradingRewardLeaderboardRequest,
+    writer: Writer = Writer.create()
+  ): Writer {
+    if (message.rewardId !== "") {
+      writer.uint32(10).string(message.rewardId);
+    }
+    return writer;
+  },
+
+  decode(
+    input: Reader | Uint8Array,
+    length?: number
+  ): QueryGetTradingRewardLeaderboardRequest {
+    const reader = input instanceof Uint8Array ? new Reader(input) : input;
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = {
+      ...baseQueryGetTradingRewardLeaderboardRequest,
+    } as QueryGetTradingRewardLeaderboardRequest;
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          message.rewardId = reader.string();
+          break;
+        default:
+          reader.skipType(tag & 7);
+          break;
+      }
+    }
+    return message;
+  },
+
+  fromJSON(object: any): QueryGetTradingRewardLeaderboardRequest {
+    const message = {
+      ...baseQueryGetTradingRewardLeaderboardRequest,
+    } as QueryGetTradingRewardLeaderboardRequest;
+    if (object.rewardId !== undefined && object.rewardId !== null) {
+      message.rewardId = String(object.rewardId);
+    } else {
+      message.rewardId = "";
+    }
+    return message;
+  },
+
+  toJSON(message: QueryGetTradingRewardLeaderboardRequest): unknown {
+    const obj: any = {};
+    message.rewardId !== undefined && (obj.rewardId = message.rewardId);
+    return obj;
+  },
+
+  fromPartial(
+    object: DeepPartial<QueryGetTradingRewardLeaderboardRequest>
+  ): QueryGetTradingRewardLeaderboardRequest {
+    const message = {
+      ...baseQueryGetTradingRewardLeaderboardRequest,
+    } as QueryGetTradingRewardLeaderboardRequest;
+    if (object.rewardId !== undefined && object.rewardId !== null) {
+      message.rewardId = object.rewardId;
+    } else {
+      message.rewardId = "";
+    }
+    return message;
+  },
+};
+
+const baseQueryGetTradingRewardLeaderboardResponse: object = {};
+
+export const QueryGetTradingRewardLeaderboardResponse = {
+  encode(
+    message: QueryGetTradingRewardLeaderboardResponse,
+    writer: Writer = Writer.create()
+  ): Writer {
+    if (message.leaderboard !== undefined) {
+      TradingRewardLeaderboard.encode(
+        message.leaderboard,
+        writer.uint32(10).fork()
+      ).ldelim();
+    }
+    return writer;
+  },
+
+  decode(
+    input: Reader | Uint8Array,
+    length?: number
+  ): QueryGetTradingRewardLeaderboardResponse {
+    const reader = input instanceof Uint8Array ? new Reader(input) : input;
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = {
+      ...baseQueryGetTradingRewardLeaderboardResponse,
+    } as QueryGetTradingRewardLeaderboardResponse;
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          message.leaderboard = TradingRewardLeaderboard.decode(
+            reader,
+            reader.uint32()
+          );
+          break;
+        default:
+          reader.skipType(tag & 7);
+          break;
+      }
+    }
+    return message;
+  },
+
+  fromJSON(object: any): QueryGetTradingRewardLeaderboardResponse {
+    const message = {
+      ...baseQueryGetTradingRewardLeaderboardResponse,
+    } as QueryGetTradingRewardLeaderboardResponse;
+    if (object.leaderboard !== undefined && object.leaderboard !== null) {
+      message.leaderboard = TradingRewardLeaderboard.fromJSON(
+        object.leaderboard
+      );
+    } else {
+      message.leaderboard = undefined;
+    }
+    return message;
+  },
+
+  toJSON(message: QueryGetTradingRewardLeaderboardResponse): unknown {
+    const obj: any = {};
+    message.leaderboard !== undefined &&
+      (obj.leaderboard = message.leaderboard
+        ? TradingRewardLeaderboard.toJSON(message.leaderboard)
+        : undefined);
+    return obj;
+  },
+
+  fromPartial(
+    object: DeepPartial<QueryGetTradingRewardLeaderboardResponse>
+  ): QueryGetTradingRewardLeaderboardResponse {
+    const message = {
+      ...baseQueryGetTradingRewardLeaderboardResponse,
+    } as QueryGetTradingRewardLeaderboardResponse;
+    if (object.leaderboard !== undefined && object.leaderboard !== null) {
+      message.leaderboard = TradingRewardLeaderboard.fromPartial(
+        object.leaderboard
+      );
+    } else {
+      message.leaderboard = undefined;
+    }
+    return message;
+  },
+};
+
+const baseQueryGetMarketIdTradingRewardIdHandlerRequest: object = {
+  marketId: "",
+};
+
+export const QueryGetMarketIdTradingRewardIdHandlerRequest = {
+  encode(
+    message: QueryGetMarketIdTradingRewardIdHandlerRequest,
+    writer: Writer = Writer.create()
+  ): Writer {
+    if (message.marketId !== "") {
+      writer.uint32(10).string(message.marketId);
+    }
+    return writer;
+  },
+
+  decode(
+    input: Reader | Uint8Array,
+    length?: number
+  ): QueryGetMarketIdTradingRewardIdHandlerRequest {
+    const reader = input instanceof Uint8Array ? new Reader(input) : input;
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = {
+      ...baseQueryGetMarketIdTradingRewardIdHandlerRequest,
+    } as QueryGetMarketIdTradingRewardIdHandlerRequest;
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          message.marketId = reader.string();
+          break;
+        default:
+          reader.skipType(tag & 7);
+          break;
+      }
+    }
+    return message;
+  },
+
+  fromJSON(object: any): QueryGetMarketIdTradingRewardIdHandlerRequest {
+    const message = {
+      ...baseQueryGetMarketIdTradingRewardIdHandlerRequest,
+    } as QueryGetMarketIdTradingRewardIdHandlerRequest;
+    if (object.marketId !== undefined && object.marketId !== null) {
+      message.marketId = String(object.marketId);
+    } else {
+      message.marketId = "";
+    }
+    return message;
+  },
+
+  toJSON(message: QueryGetMarketIdTradingRewardIdHandlerRequest): unknown {
+    const obj: any = {};
+    message.marketId !== undefined && (obj.marketId = message.marketId);
+    return obj;
+  },
+
+  fromPartial(
+    object: DeepPartial<QueryGetMarketIdTradingRewardIdHandlerRequest>
+  ): QueryGetMarketIdTradingRewardIdHandlerRequest {
+    const message = {
+      ...baseQueryGetMarketIdTradingRewardIdHandlerRequest,
+    } as QueryGetMarketIdTradingRewardIdHandlerRequest;
+    if (object.marketId !== undefined && object.marketId !== null) {
+      message.marketId = object.marketId;
+    } else {
+      message.marketId = "";
+    }
+    return message;
+  },
+};
+
+const baseQueryGetMarketIdTradingRewardIdHandlerResponse: object = {};
+
+export const QueryGetMarketIdTradingRewardIdHandlerResponse = {
+  encode(
+    message: QueryGetMarketIdTradingRewardIdHandlerResponse,
+    writer: Writer = Writer.create()
+  ): Writer {
+    if (message.marketIdRewardId !== undefined) {
+      MarketIdTradingRewardId.encode(
+        message.marketIdRewardId,
+        writer.uint32(10).fork()
+      ).ldelim();
+    }
+    return writer;
+  },
+
+  decode(
+    input: Reader | Uint8Array,
+    length?: number
+  ): QueryGetMarketIdTradingRewardIdHandlerResponse {
+    const reader = input instanceof Uint8Array ? new Reader(input) : input;
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = {
+      ...baseQueryGetMarketIdTradingRewardIdHandlerResponse,
+    } as QueryGetMarketIdTradingRewardIdHandlerResponse;
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          message.marketIdRewardId = MarketIdTradingRewardId.decode(
+            reader,
+            reader.uint32()
+          );
+          break;
+        default:
+          reader.skipType(tag & 7);
+          break;
+      }
+    }
+    return message;
+  },
+
+  fromJSON(object: any): QueryGetMarketIdTradingRewardIdHandlerResponse {
+    const message = {
+      ...baseQueryGetMarketIdTradingRewardIdHandlerResponse,
+    } as QueryGetMarketIdTradingRewardIdHandlerResponse;
+    if (
+      object.marketIdRewardId !== undefined &&
+      object.marketIdRewardId !== null
+    ) {
+      message.marketIdRewardId = MarketIdTradingRewardId.fromJSON(
+        object.marketIdRewardId
+      );
+    } else {
+      message.marketIdRewardId = undefined;
+    }
+    return message;
+  },
+
+  toJSON(message: QueryGetMarketIdTradingRewardIdHandlerResponse): unknown {
+    const obj: any = {};
+    message.marketIdRewardId !== undefined &&
+      (obj.marketIdRewardId = message.marketIdRewardId
+        ? MarketIdTradingRewardId.toJSON(message.marketIdRewardId)
+        : undefined);
+    return obj;
+  },
+
+  fromPartial(
+    object: DeepPartial<QueryGetMarketIdTradingRewardIdHandlerResponse>
+  ): QueryGetMarketIdTradingRewardIdHandlerResponse {
+    const message = {
+      ...baseQueryGetMarketIdTradingRewardIdHandlerResponse,
+    } as QueryGetMarketIdTradingRewardIdHandlerResponse;
+    if (
+      object.marketIdRewardId !== undefined &&
+      object.marketIdRewardId !== null
+    ) {
+      message.marketIdRewardId = MarketIdTradingRewardId.fromPartial(
+        object.marketIdRewardId
+      );
+    } else {
+      message.marketIdRewardId = undefined;
+    }
+    return message;
+  },
+};
+
+const baseQueryAllPendingUnlockParticipantRequest: object = {};
+
+export const QueryAllPendingUnlockParticipantRequest = {
+  encode(
+    message: QueryAllPendingUnlockParticipantRequest,
+    writer: Writer = Writer.create()
+  ): Writer {
+    if (message.pagination !== undefined) {
+      PageRequest.encode(message.pagination, writer.uint32(10).fork()).ldelim();
+    }
+    return writer;
+  },
+
+  decode(
+    input: Reader | Uint8Array,
+    length?: number
+  ): QueryAllPendingUnlockParticipantRequest {
+    const reader = input instanceof Uint8Array ? new Reader(input) : input;
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = {
+      ...baseQueryAllPendingUnlockParticipantRequest,
+    } as QueryAllPendingUnlockParticipantRequest;
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          message.pagination = PageRequest.decode(reader, reader.uint32());
+          break;
+        default:
+          reader.skipType(tag & 7);
+          break;
+      }
+    }
+    return message;
+  },
+
+  fromJSON(object: any): QueryAllPendingUnlockParticipantRequest {
+    const message = {
+      ...baseQueryAllPendingUnlockParticipantRequest,
+    } as QueryAllPendingUnlockParticipantRequest;
+    if (object.pagination !== undefined && object.pagination !== null) {
+      message.pagination = PageRequest.fromJSON(object.pagination);
+    } else {
+      message.pagination = undefined;
+    }
+    return message;
+  },
+
+  toJSON(message: QueryAllPendingUnlockParticipantRequest): unknown {
+    const obj: any = {};
+    message.pagination !== undefined &&
+      (obj.pagination = message.pagination
+        ? PageRequest.toJSON(message.pagination)
+        : undefined);
+    return obj;
+  },
+
+  fromPartial(
+    object: DeepPartial<QueryAllPendingUnlockParticipantRequest>
+  ): QueryAllPendingUnlockParticipantRequest {
+    const message = {
+      ...baseQueryAllPendingUnlockParticipantRequest,
+    } as QueryAllPendingUnlockParticipantRequest;
+    if (object.pagination !== undefined && object.pagination !== null) {
+      message.pagination = PageRequest.fromPartial(object.pagination);
+    } else {
+      message.pagination = undefined;
+    }
+    return message;
+  },
+};
+
+const baseQueryAllPendingUnlockParticipantResponse: object = {};
+
+export const QueryAllPendingUnlockParticipantResponse = {
+  encode(
+    message: QueryAllPendingUnlockParticipantResponse,
+    writer: Writer = Writer.create()
+  ): Writer {
+    for (const v of message.list) {
+      PendingUnlockParticipant.encode(v!, writer.uint32(10).fork()).ldelim();
+    }
+    if (message.pagination !== undefined) {
+      PageResponse.encode(
+        message.pagination,
+        writer.uint32(18).fork()
+      ).ldelim();
+    }
+    return writer;
+  },
+
+  decode(
+    input: Reader | Uint8Array,
+    length?: number
+  ): QueryAllPendingUnlockParticipantResponse {
+    const reader = input instanceof Uint8Array ? new Reader(input) : input;
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = {
+      ...baseQueryAllPendingUnlockParticipantResponse,
+    } as QueryAllPendingUnlockParticipantResponse;
+    message.list = [];
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          message.list.push(
+            PendingUnlockParticipant.decode(reader, reader.uint32())
+          );
+          break;
+        case 2:
+          message.pagination = PageResponse.decode(reader, reader.uint32());
+          break;
+        default:
+          reader.skipType(tag & 7);
+          break;
+      }
+    }
+    return message;
+  },
+
+  fromJSON(object: any): QueryAllPendingUnlockParticipantResponse {
+    const message = {
+      ...baseQueryAllPendingUnlockParticipantResponse,
+    } as QueryAllPendingUnlockParticipantResponse;
+    message.list = [];
+    if (object.list !== undefined && object.list !== null) {
+      for (const e of object.list) {
+        message.list.push(PendingUnlockParticipant.fromJSON(e));
+      }
+    }
+    if (object.pagination !== undefined && object.pagination !== null) {
+      message.pagination = PageResponse.fromJSON(object.pagination);
+    } else {
+      message.pagination = undefined;
+    }
+    return message;
+  },
+
+  toJSON(message: QueryAllPendingUnlockParticipantResponse): unknown {
+    const obj: any = {};
+    if (message.list) {
+      obj.list = message.list.map((e) =>
+        e ? PendingUnlockParticipant.toJSON(e) : undefined
+      );
+    } else {
+      obj.list = [];
+    }
+    message.pagination !== undefined &&
+      (obj.pagination = message.pagination
+        ? PageResponse.toJSON(message.pagination)
+        : undefined);
+    return obj;
+  },
+
+  fromPartial(
+    object: DeepPartial<QueryAllPendingUnlockParticipantResponse>
+  ): QueryAllPendingUnlockParticipantResponse {
+    const message = {
+      ...baseQueryAllPendingUnlockParticipantResponse,
+    } as QueryAllPendingUnlockParticipantResponse;
+    message.list = [];
+    if (object.list !== undefined && object.list !== null) {
+      for (const e of object.list) {
+        message.list.push(PendingUnlockParticipant.fromPartial(e));
+      }
+    }
+    if (object.pagination !== undefined && object.pagination !== null) {
+      message.pagination = PageResponse.fromPartial(object.pagination);
+    } else {
+      message.pagination = undefined;
+    }
+    return message;
+  },
+};
+
 /** Query defines the gRPC querier service. */
 export interface Query {
   /** Parameters queries the parameters of the module. */
@@ -1199,6 +1734,18 @@ export interface Query {
   StakingRewardParticipantAll(
     request: QueryAllStakingRewardParticipantRequest
   ): Promise<QueryAllStakingRewardParticipantResponse>;
+  /** Queries a list of GetTradingRewardLeaderboard items. */
+  GetTradingRewardLeaderboardHandler(
+    request: QueryGetTradingRewardLeaderboardRequest
+  ): Promise<QueryGetTradingRewardLeaderboardResponse>;
+  /** Queries a list of GetMarketIdTradingRewardIdHandler items. */
+  GetMarketIdTradingRewardIdHandler(
+    request: QueryGetMarketIdTradingRewardIdHandlerRequest
+  ): Promise<QueryGetMarketIdTradingRewardIdHandlerResponse>;
+  /** Queries a list of AllPendingUnlockParticipant items. */
+  AllPendingUnlockParticipant(
+    request: QueryAllPendingUnlockParticipantRequest
+  ): Promise<QueryAllPendingUnlockParticipantResponse>;
 }
 
 export class QueryClientImpl implements Query {
@@ -1297,6 +1844,54 @@ export class QueryClientImpl implements Query {
     );
     return promise.then((data) =>
       QueryAllStakingRewardParticipantResponse.decode(new Reader(data))
+    );
+  }
+
+  GetTradingRewardLeaderboardHandler(
+    request: QueryGetTradingRewardLeaderboardRequest
+  ): Promise<QueryGetTradingRewardLeaderboardResponse> {
+    const data = QueryGetTradingRewardLeaderboardRequest.encode(
+      request
+    ).finish();
+    const promise = this.rpc.request(
+      "bze.v1.rewards.Query",
+      "GetTradingRewardLeaderboardHandler",
+      data
+    );
+    return promise.then((data) =>
+      QueryGetTradingRewardLeaderboardResponse.decode(new Reader(data))
+    );
+  }
+
+  GetMarketIdTradingRewardIdHandler(
+    request: QueryGetMarketIdTradingRewardIdHandlerRequest
+  ): Promise<QueryGetMarketIdTradingRewardIdHandlerResponse> {
+    const data = QueryGetMarketIdTradingRewardIdHandlerRequest.encode(
+      request
+    ).finish();
+    const promise = this.rpc.request(
+      "bze.v1.rewards.Query",
+      "GetMarketIdTradingRewardIdHandler",
+      data
+    );
+    return promise.then((data) =>
+      QueryGetMarketIdTradingRewardIdHandlerResponse.decode(new Reader(data))
+    );
+  }
+
+  AllPendingUnlockParticipant(
+    request: QueryAllPendingUnlockParticipantRequest
+  ): Promise<QueryAllPendingUnlockParticipantResponse> {
+    const data = QueryAllPendingUnlockParticipantRequest.encode(
+      request
+    ).finish();
+    const promise = this.rpc.request(
+      "bze.v1.rewards.Query",
+      "AllPendingUnlockParticipant",
+      data
+    );
+    return promise.then((data) =>
+      QueryAllPendingUnlockParticipantResponse.decode(new Reader(data))
     );
   }
 }

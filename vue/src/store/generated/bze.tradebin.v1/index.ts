@@ -11,11 +11,12 @@ import { Order } from "bze-alphateam-bze-client-ts/bze.tradebin.v1/types"
 import { OrderReference } from "bze-alphateam-bze-client-ts/bze.tradebin.v1/types"
 import { AggregatedOrder } from "bze-alphateam-bze-client-ts/bze.tradebin.v1/types"
 import { HistoryOrder } from "bze-alphateam-bze-client-ts/bze.tradebin.v1/types"
+import { UserDust } from "bze-alphateam-bze-client-ts/bze.tradebin.v1/types"
 import { Params } from "bze-alphateam-bze-client-ts/bze.tradebin.v1/types"
 import { QueueMessage } from "bze-alphateam-bze-client-ts/bze.tradebin.v1/types"
 
 
-export { OrderCreateMessageEvent, OrderCancelMessageEvent, MarketCreatedEvent, OrderExecutedEvent, OrderCanceledEvent, OrderSavedEvent, Market, Order, OrderReference, AggregatedOrder, HistoryOrder, Params, QueueMessage };
+export { OrderCreateMessageEvent, OrderCancelMessageEvent, MarketCreatedEvent, OrderExecutedEvent, OrderCanceledEvent, OrderSavedEvent, Market, Order, OrderReference, AggregatedOrder, HistoryOrder, UserDust, Params, QueueMessage };
 
 function initClient(vuexGetters) {
 	return new Client(vuexGetters['common/env/getEnv'], vuexGetters['common/wallet/signer'])
@@ -54,6 +55,7 @@ const getDefaultState = () => {
 				MarketAggregatedOrders: {},
 				MarketHistory: {},
 				MarketOrder: {},
+				AllUserDust: {},
 				
 				_Structure: {
 						OrderCreateMessageEvent: getStructure(OrderCreateMessageEvent.fromPartial({})),
@@ -67,6 +69,7 @@ const getDefaultState = () => {
 						OrderReference: getStructure(OrderReference.fromPartial({})),
 						AggregatedOrder: getStructure(AggregatedOrder.fromPartial({})),
 						HistoryOrder: getStructure(HistoryOrder.fromPartial({})),
+						UserDust: getStructure(UserDust.fromPartial({})),
 						Params: getStructure(Params.fromPartial({})),
 						QueueMessage: getStructure(QueueMessage.fromPartial({})),
 						
@@ -144,6 +147,12 @@ export default {
 						(<any> params).query=null
 					}
 			return state.MarketOrder[JSON.stringify(params)] ?? {}
+		},
+				getAllUserDust: (state) => (params = { params: {}}) => {
+					if (!(<any> params).query) {
+						(<any> params).query=null
+					}
+			return state.AllUserDust[JSON.stringify(params)] ?? {}
 		},
 				
 		getTypeStructure: (state) => (type) => {
@@ -383,19 +392,32 @@ export default {
 		},
 		
 		
-		async sendMsgCreateOrder({ rootGetters }, { value, fee = [], memo = '' }) {
+		
+		
+		 		
+		
+		
+		async QueryAllUserDust({ commit, rootGetters, getters }, { options: { subscribe, all} = { subscribe:false, all:false}, params, query=null }) {
 			try {
-				const client=await initClient(rootGetters)
-				const result = await client.BzeTradebinV1.tx.sendMsgCreateOrder({ value, fee: {amount: fee, gas: "200000"}, memo })
-				return result
-			} catch (e) {
-				if (e == MissingWalletError) {
-					throw new Error('TxClient:MsgCreateOrder:Init Could not initialize signing client. Wallet is required.')
-				}else{
-					throw new Error('TxClient:MsgCreateOrder:Send Could not broadcast Tx: '+ e.message)
+				const key = params ?? {};
+				const client = initClient(rootGetters);
+				let value= (await client.BzeTradebinV1.query.queryAllUserDust(query ?? undefined)).data
+				
+					
+				while (all && (<any> value).pagination && (<any> value).pagination.next_key!=null) {
+					let next_values=(await client.BzeTradebinV1.query.queryAllUserDust({...query ?? {}, 'pagination.key':(<any> value).pagination.next_key} as any)).data
+					value = mergeResults(value, next_values);
 				}
+				commit('QUERY', { query: 'AllUserDust', key: { params: {...key}, query}, value })
+				if (subscribe) commit('SUBSCRIBE', { action: 'QueryAllUserDust', payload: { options: { all }, params: {...key},query }})
+				return getters['getAllUserDust']( { params: {...key}, query}) ?? {}
+			} catch (e) {
+				throw new Error('QueryClient:QueryAllUserDust API Node Unavailable. Could not perform query: ' + e.message)
+				
 			}
 		},
+		
+		
 		async sendMsgCreateMarket({ rootGetters }, { value, fee = [], memo = '' }) {
 			try {
 				const client=await initClient(rootGetters)
@@ -422,20 +444,20 @@ export default {
 				}
 			}
 		},
-		
-		async MsgCreateOrder({ rootGetters }, { value }) {
+		async sendMsgCreateOrder({ rootGetters }, { value, fee = [], memo = '' }) {
 			try {
-				const client=initClient(rootGetters)
-				const msg = await client.BzeTradebinV1.tx.msgCreateOrder({value})
-				return msg
+				const client=await initClient(rootGetters)
+				const result = await client.BzeTradebinV1.tx.sendMsgCreateOrder({ value, fee: {amount: fee, gas: "200000"}, memo })
+				return result
 			} catch (e) {
 				if (e == MissingWalletError) {
 					throw new Error('TxClient:MsgCreateOrder:Init Could not initialize signing client. Wallet is required.')
-				} else{
-					throw new Error('TxClient:MsgCreateOrder:Create Could not create message: ' + e.message)
+				}else{
+					throw new Error('TxClient:MsgCreateOrder:Send Could not broadcast Tx: '+ e.message)
 				}
 			}
 		},
+		
 		async MsgCreateMarket({ rootGetters }, { value }) {
 			try {
 				const client=initClient(rootGetters)
@@ -459,6 +481,19 @@ export default {
 					throw new Error('TxClient:MsgCancelOrder:Init Could not initialize signing client. Wallet is required.')
 				} else{
 					throw new Error('TxClient:MsgCancelOrder:Create Could not create message: ' + e.message)
+				}
+			}
+		},
+		async MsgCreateOrder({ rootGetters }, { value }) {
+			try {
+				const client=initClient(rootGetters)
+				const msg = await client.BzeTradebinV1.tx.msgCreateOrder({value})
+				return msg
+			} catch (e) {
+				if (e == MissingWalletError) {
+					throw new Error('TxClient:MsgCreateOrder:Init Could not initialize signing client. Wallet is required.')
+				} else{
+					throw new Error('TxClient:MsgCreateOrder:Create Could not create message: ' + e.message)
 				}
 			}
 		},

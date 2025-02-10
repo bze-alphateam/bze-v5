@@ -9,6 +9,7 @@ import { Order } from "./types/tradebin/order"
 import { OrderReference } from "./types/tradebin/order"
 import { AggregatedOrder } from "./types/tradebin/order"
 import { HistoryOrder } from "./types/tradebin/order"
+import { UserDust } from "./types/tradebin/order"
 import { Params } from "./types/tradebin/params"
 import { QueueMessage } from "./types/tradebin/queue_message"
 
@@ -25,6 +26,7 @@ export {
     OrderReference,
     AggregatedOrder,
     HistoryOrder,
+    UserDust,
     Params,
     QueueMessage,
     

@@ -1,3 +1,4 @@
+import { ActivateTradingRewardProposal } from "./types/rewards/gov"
 import { Params } from "./types/rewards/params"
 import { StakingReward } from "./types/rewards/staking_reward"
 import { StakingRewardParticipant } from "./types/rewards/staking_reward_participant"
@@ -11,6 +12,7 @@ import { MarketIdTradingRewardId } from "./types/rewards/trading_reward"
 
 
 export {     
+    ActivateTradingRewardProposal,
     Params,
     StakingReward,
     StakingRewardParticipant,

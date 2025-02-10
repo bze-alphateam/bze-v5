@@ -13,6 +13,11 @@ export interface ProtobufAny {
   "@type"?: string;
 }
 
+export interface RewardsMarketIdTradingRewardId {
+  reward_id?: string;
+  market_id?: string;
+}
+
 export interface RewardsMsgClaimStakingRewardsResponse {
   amount?: string;
 }
@@ -25,11 +30,35 @@ export interface RewardsMsgCreateTradingRewardResponse {
   reward_id?: string;
 }
 
+export type RewardsMsgDistributeStakingRewardsResponse = object;
+
 export type RewardsMsgExitStakingResponse = object;
 
 export type RewardsMsgJoinStakingResponse = object;
 
 export type RewardsMsgUpdateStakingRewardResponse = object;
+
+export interface RewardsPendingUnlockParticipant {
+  index?: string;
+  address?: string;
+  amount?: string;
+  denom?: string;
+}
+
+export interface RewardsQueryAllPendingUnlockParticipantResponse {
+  list?: RewardsPendingUnlockParticipant[];
+
+  /**
+   * PageResponse is to be embedded in gRPC response messages where the
+   * corresponding request message has used PageRequest.
+   *
+   *  message SomeResponse {
+   *          repeated Bar results = 1;
+   *          PageResponse page = 2;
+   *  }
+   */
+  pagination?: V1Beta1PageResponse;
+}
 
 export interface RewardsQueryAllStakingRewardParticipantResponse {
   list?: V1RewardsStakingRewardParticipant[];
@@ -76,6 +105,10 @@ export interface RewardsQueryAllTradingRewardResponse {
   pagination?: V1Beta1PageResponse;
 }
 
+export interface RewardsQueryGetMarketIdTradingRewardIdHandlerResponse {
+  market_id_reward_id?: RewardsMarketIdTradingRewardId;
+}
+
 export interface RewardsQueryGetStakingRewardParticipantResponse {
   list?: V1RewardsStakingRewardParticipant[];
 
@@ -95,6 +128,10 @@ export interface RewardsQueryGetStakingRewardResponse {
   staking_reward?: V1RewardsStakingReward;
 }
 
+export interface RewardsQueryGetTradingRewardLeaderboardResponse {
+  leaderboard?: RewardsTradingRewardLeaderboard;
+}
+
 export interface RewardsQueryGetTradingRewardResponse {
   trading_reward?: V1RewardsTradingReward;
 }
@@ -105,6 +142,19 @@ export interface RewardsQueryGetTradingRewardResponse {
 export interface RewardsQueryParamsResponse {
   /** params holds all the parameters of this module. */
   params?: V1RewardsParams;
+}
+
+export interface RewardsTradingRewardLeaderboard {
+  reward_id?: string;
+  list?: RewardsTradingRewardLeaderboardEntry[];
+}
+
+export interface RewardsTradingRewardLeaderboardEntry {
+  amount?: string;
+  address?: string;
+
+  /** @format int64 */
+  created_at?: string;
 }
 
 export interface RpcStatus {
@@ -170,7 +220,12 @@ corresponding request message has used PageRequest.
  }
 */
 export interface V1Beta1PageResponse {
-  /** @format byte */
+  /**
+   * next_key is the key to be passed to PageRequest.key to
+   * query the next page most efficiently. It will be empty if
+   * there are no more results.
+   * @format byte
+   */
   next_key?: string;
 
   /** @format uint64 */
@@ -429,6 +484,49 @@ export class Api<SecurityDataType extends unknown> extends HttpClient<SecurityDa
    * No description
    *
    * @tags Query
+   * @name QueryAllPendingUnlockParticipant
+   * @summary Queries a list of AllPendingUnlockParticipant items.
+   * @request GET:/bze/rewards/v1/all_pending_unlock_participant
+   */
+  queryAllPendingUnlockParticipant = (
+    query?: {
+      "pagination.key"?: string;
+      "pagination.offset"?: string;
+      "pagination.limit"?: string;
+      "pagination.count_total"?: boolean;
+      "pagination.reverse"?: boolean;
+    },
+    params: RequestParams = {},
+  ) =>
+    this.request<RewardsQueryAllPendingUnlockParticipantResponse, RpcStatus>({
+      path: `/bze/rewards/v1/all_pending_unlock_participant`,
+      method: "GET",
+      query: query,
+      format: "json",
+      ...params,
+    });
+
+  /**
+   * No description
+   *
+   * @tags Query
+   * @name QueryGetMarketIdTradingRewardIdHandler
+   * @summary Queries a list of GetMarketIdTradingRewardIdHandler items.
+   * @request GET:/bze/rewards/v1/market_id_trading_reward_id
+   */
+  queryGetMarketIdTradingRewardIdHandler = (query?: { market_id?: string }, params: RequestParams = {}) =>
+    this.request<RewardsQueryGetMarketIdTradingRewardIdHandlerResponse, RpcStatus>({
+      path: `/bze/rewards/v1/market_id_trading_reward_id`,
+      method: "GET",
+      query: query,
+      format: "json",
+      ...params,
+    });
+
+  /**
+   * No description
+   *
+   * @tags Query
    * @name QueryParams
    * @summary Parameters queries the parameters of the module.
    * @request GET:/bze/rewards/v1/params
@@ -540,11 +638,28 @@ export class Api<SecurityDataType extends unknown> extends HttpClient<SecurityDa
    * No description
    *
    * @tags Query
+   * @name QueryTradingReward
+   * @summary Queries a TradingReward by index.
+   * @request GET:/bze/rewards/v1/trading_reward/{reward_id}
+   */
+  queryTradingReward = (reward_id: string, params: RequestParams = {}) =>
+    this.request<RewardsQueryGetTradingRewardResponse, RpcStatus>({
+      path: `/bze/rewards/v1/trading_reward/${reward_id}`,
+      method: "GET",
+      format: "json",
+      ...params,
+    });
+
+  /**
+   * No description
+   *
+   * @tags Query
    * @name QueryTradingRewardAll
    * @summary Queries a list of TradingReward items.
-   * @request GET:/bze/rewards/v1/trading_reward
+   * @request GET:/bze/rewards/v1/trading_reward/{state}
    */
   queryTradingRewardAll = (
+    state: string,
     query?: {
       "pagination.key"?: string;
       "pagination.offset"?: string;
@@ -555,7 +670,7 @@ export class Api<SecurityDataType extends unknown> extends HttpClient<SecurityDa
     params: RequestParams = {},
   ) =>
     this.request<RewardsQueryAllTradingRewardResponse, RpcStatus>({
-      path: `/bze/rewards/v1/trading_reward`,
+      path: `/bze/rewards/v1/trading_reward/${state}`,
       method: "GET",
       query: query,
       format: "json",
@@ -566,13 +681,13 @@ export class Api<SecurityDataType extends unknown> extends HttpClient<SecurityDa
    * No description
    *
    * @tags Query
-   * @name QueryTradingReward
-   * @summary Queries a TradingReward by index.
-   * @request GET:/bze/rewards/v1/trading_reward/{reward_id}
+   * @name QueryGetTradingRewardLeaderboardHandler
+   * @summary Queries a list of GetTradingRewardLeaderboard items.
+   * @request GET:/bze/rewards/v1/trading_reward_leaderboard/{reward_id}
    */
-  queryTradingReward = (reward_id: string, params: RequestParams = {}) =>
-    this.request<RewardsQueryGetTradingRewardResponse, RpcStatus>({
-      path: `/bze/rewards/v1/trading_reward/${reward_id}`,
+  queryGetTradingRewardLeaderboardHandler = (reward_id: string, params: RequestParams = {}) =>
+    this.request<RewardsQueryGetTradingRewardLeaderboardResponse, RpcStatus>({
+      path: `/bze/rewards/v1/trading_reward_leaderboard/${reward_id}`,
       method: "GET",
       format: "json",
       ...params,
