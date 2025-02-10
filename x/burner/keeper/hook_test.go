@@ -3,6 +3,7 @@ package keeper_test
 import (
 	"fmt"
 	"github.com/bze-alphateam/bze/testutil/simapp"
+	"github.com/bze-alphateam/bze/x/burner/keeper"
 	"github.com/bze-alphateam/bze/x/burner/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 )
@@ -182,4 +183,43 @@ func (suite *IntegrationTestSuite) TestBurnerRaffleCleanupHook_MultipleRaffles_S
 			}
 		}
 	}
+}
+
+func (suite *IntegrationTestSuite) TestGetBurnerPeriodicBurnHook_BurnSuccess() {
+	hook := suite.k.GetBurnerPeriodicBurnHook()
+	suite.Require().NotNil(hook)
+
+	coins := sdk.NewCoins(sdk.NewCoin("ubze", sdk.NewInt(987654321)))
+
+	suite.Require().NoError(simapp.FundModuleAccount(*suite.bank, suite.ctx, types.ModuleName, coins))
+
+	suite.Require().NoError(hook.AfterEpochEnd(suite.ctx, "week", int64(keeper.BurnInterval)))
+
+	allBurns := suite.k.GetAllBurnedCoins(suite.ctx)
+	suite.Require().Len(allBurns, 1)
+	suite.Require().Equal(allBurns[0].Burned, coins.String())
+}
+
+func (suite *IntegrationTestSuite) TestGetBurnerPeriodicBurnHook_BurnSkipped() {
+	hook := suite.k.GetBurnerPeriodicBurnHook()
+	suite.Require().NotNil(hook)
+
+	coins := sdk.NewCoins(sdk.NewCoin("ubze", sdk.NewInt(1234567890)))
+
+	suite.Require().NoError(simapp.FundModuleAccount(*suite.bank, suite.ctx, types.ModuleName, coins))
+
+	suite.Require().NoError(hook.AfterEpochEnd(suite.ctx, "day", int64(0)))
+
+	allBurns := suite.k.GetAllBurnedCoins(suite.ctx)
+	suite.Require().Len(allBurns, 0)
+}
+
+func (suite *IntegrationTestSuite) TestGetBurnerPeriodicBurnHook_EmptyBalance() {
+	hook := suite.k.GetBurnerPeriodicBurnHook()
+	suite.Require().NotNil(hook)
+
+	suite.Require().NoError(hook.AfterEpochEnd(suite.ctx, "week", int64(keeper.BurnInterval*2)))
+
+	allBurns := suite.k.GetAllBurnedCoins(suite.ctx)
+	suite.Require().Len(allBurns, 0)
 }
