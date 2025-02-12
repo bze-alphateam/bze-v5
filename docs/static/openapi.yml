@@ -43532,6 +43532,13 @@ definitions:
         type: string
       price:
         type: string
+  bze.tradebin.v1.FillOrderItem:
+    type: object
+    properties:
+      price:
+        type: string
+      amount:
+        type: string
   bze.tradebin.v1.HistoryOrder:
     type: object
     properties:
@@ -43564,6 +43571,8 @@ definitions:
   bze.tradebin.v1.MsgCreateMarketResponse:
     type: object
   bze.tradebin.v1.MsgCreateOrderResponse:
+    type: object
+  bze.tradebin.v1.MsgFillOrdersResponse:
     type: object
   bze.tradebin.v1.Order:
     type: object

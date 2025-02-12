@@ -325,6 +325,7 @@ type OrderCanceledEvent struct {
 	OrderType string `protobuf:"bytes,3,opt,name=order_type,json=orderType,proto3" json:"order_type,omitempty"`
 	Amount    string `protobuf:"bytes,4,opt,name=amount,proto3" json:"amount,omitempty"`
 	Price     string `protobuf:"bytes,5,opt,name=price,proto3" json:"price,omitempty"`
+	Owner     string `protobuf:"bytes,6,opt,name=owner,proto3" json:"owner,omitempty"`
 }
 
 func (m *OrderCanceledEvent) Reset()         { *m = OrderCanceledEvent{} }
@@ -395,12 +396,20 @@ func (m *OrderCanceledEvent) GetPrice() string {
 	return ""
 }
 
+func (m *OrderCanceledEvent) GetOwner() string {
+	if m != nil {
+		return m.Owner
+	}
+	return ""
+}
+
 type OrderSavedEvent struct {
 	Id        string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	MarketId  string `protobuf:"bytes,2,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
 	OrderType string `protobuf:"bytes,3,opt,name=order_type,json=orderType,proto3" json:"order_type,omitempty"`
 	Amount    string `protobuf:"bytes,4,opt,name=amount,proto3" json:"amount,omitempty"`
 	Price     string `protobuf:"bytes,5,opt,name=price,proto3" json:"price,omitempty"`
+	Owner     string `protobuf:"bytes,6,opt,name=owner,proto3" json:"owner,omitempty"`
 }
 
 func (m *OrderSavedEvent) Reset()         { *m = OrderSavedEvent{} }
@@ -467,6 +476,13 @@ func (m *OrderSavedEvent) GetAmount() string {
 func (m *OrderSavedEvent) GetPrice() string {
 	if m != nil {
 		return m.Price
+	}
+	return ""
+}
+
+func (m *OrderSavedEvent) GetOwner() string {
+	if m != nil {
+		return m.Owner
 	}
 	return ""
 }
@@ -756,6 +772,13 @@ func (m *OrderCanceledEvent) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if len(m.Owner) > 0 {
+		i -= len(m.Owner)
+		copy(dAtA[i:], m.Owner)
+		i = encodeVarintEvents(dAtA, i, uint64(len(m.Owner)))
+		i--
+		dAtA[i] = 0x32
+	}
 	if len(m.Price) > 0 {
 		i -= len(m.Price)
 		copy(dAtA[i:], m.Price)
@@ -814,6 +837,13 @@ func (m *OrderSavedEvent) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if len(m.Owner) > 0 {
+		i -= len(m.Owner)
+		copy(dAtA[i:], m.Owner)
+		i = encodeVarintEvents(dAtA, i, uint64(len(m.Owner)))
+		i--
+		dAtA[i] = 0x32
+	}
 	if len(m.Price) > 0 {
 		i -= len(m.Price)
 		copy(dAtA[i:], m.Price)
@@ -972,6 +1002,14 @@ func (m *OrderExecutedEvent) Size() (n int) {
 	if l > 0 {
 		n += 1 + l + sovEvents(uint64(l))
 	}
+	l = len(m.Maker)
+	if l > 0 {
+		n += 1 + l + sovEvents(uint64(l))
+	}
+	l = len(m.Taker)
+	if l > 0 {
+		n += 1 + l + sovEvents(uint64(l))
+	}
 	return n
 }
 
@@ -1001,6 +1039,10 @@ func (m *OrderCanceledEvent) Size() (n int) {
 	if l > 0 {
 		n += 1 + l + sovEvents(uint64(l))
 	}
+	l = len(m.Owner)
+	if l > 0 {
+		n += 1 + l + sovEvents(uint64(l))
+	}
 	return n
 }
 
@@ -1027,6 +1069,10 @@ func (m *OrderSavedEvent) Size() (n int) {
 		n += 1 + l + sovEvents(uint64(l))
 	}
 	l = len(m.Price)
+	if l > 0 {
+		n += 1 + l + sovEvents(uint64(l))
+	}
+	l = len(m.Owner)
 	if l > 0 {
 		n += 1 + l + sovEvents(uint64(l))
 	}
@@ -2036,6 +2082,38 @@ func (m *OrderCanceledEvent) Unmarshal(dAtA []byte) error {
 			}
 			m.Price = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
+		case 6:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Owner", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowEvents
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthEvents
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthEvents
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Owner = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipEvents(dAtA[iNdEx:])
@@ -2245,6 +2323,38 @@ func (m *OrderSavedEvent) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Price = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 6:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Owner", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowEvents
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthEvents
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthEvents
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Owner = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
