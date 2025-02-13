@@ -40,6 +40,7 @@ export interface OrderCanceledEvent {
   orderType: string;
   amount: string;
   price: string;
+  owner: string;
 }
 
 export interface OrderSavedEvent {
@@ -48,6 +49,7 @@ export interface OrderSavedEvent {
   orderType: string;
   amount: string;
   price: string;
+  owner: string;
 }
 
 const baseOrderCreateMessageEvent: object = {
@@ -578,6 +580,7 @@ const baseOrderCanceledEvent: object = {
   orderType: "",
   amount: "",
   price: "",
+  owner: "",
 };
 
 export const OrderCanceledEvent = {
@@ -599,6 +602,9 @@ export const OrderCanceledEvent = {
     }
     if (message.price !== "") {
       writer.uint32(42).string(message.price);
+    }
+    if (message.owner !== "") {
+      writer.uint32(50).string(message.owner);
     }
     return writer;
   },
@@ -624,6 +630,9 @@ export const OrderCanceledEvent = {
           break;
         case 5:
           message.price = reader.string();
+          break;
+        case 6:
+          message.owner = reader.string();
           break;
         default:
           reader.skipType(tag & 7);
@@ -660,6 +669,11 @@ export const OrderCanceledEvent = {
     } else {
       message.price = "";
     }
+    if (object.owner !== undefined && object.owner !== null) {
+      message.owner = String(object.owner);
+    } else {
+      message.owner = "";
+    }
     return message;
   },
 
@@ -670,6 +684,7 @@ export const OrderCanceledEvent = {
     message.orderType !== undefined && (obj.orderType = message.orderType);
     message.amount !== undefined && (obj.amount = message.amount);
     message.price !== undefined && (obj.price = message.price);
+    message.owner !== undefined && (obj.owner = message.owner);
     return obj;
   },
 
@@ -700,6 +715,11 @@ export const OrderCanceledEvent = {
     } else {
       message.price = "";
     }
+    if (object.owner !== undefined && object.owner !== null) {
+      message.owner = object.owner;
+    } else {
+      message.owner = "";
+    }
     return message;
   },
 };
@@ -710,6 +730,7 @@ const baseOrderSavedEvent: object = {
   orderType: "",
   amount: "",
   price: "",
+  owner: "",
 };
 
 export const OrderSavedEvent = {
@@ -728,6 +749,9 @@ export const OrderSavedEvent = {
     }
     if (message.price !== "") {
       writer.uint32(42).string(message.price);
+    }
+    if (message.owner !== "") {
+      writer.uint32(50).string(message.owner);
     }
     return writer;
   },
@@ -753,6 +777,9 @@ export const OrderSavedEvent = {
           break;
         case 5:
           message.price = reader.string();
+          break;
+        case 6:
+          message.owner = reader.string();
           break;
         default:
           reader.skipType(tag & 7);
@@ -789,6 +816,11 @@ export const OrderSavedEvent = {
     } else {
       message.price = "";
     }
+    if (object.owner !== undefined && object.owner !== null) {
+      message.owner = String(object.owner);
+    } else {
+      message.owner = "";
+    }
     return message;
   },
 
@@ -799,6 +831,7 @@ export const OrderSavedEvent = {
     message.orderType !== undefined && (obj.orderType = message.orderType);
     message.amount !== undefined && (obj.amount = message.amount);
     message.price !== undefined && (obj.price = message.price);
+    message.owner !== undefined && (obj.owner = message.owner);
     return obj;
   },
 
@@ -828,6 +861,11 @@ export const OrderSavedEvent = {
       message.price = object.price;
     } else {
       message.price = "";
+    }
+    if (object.owner !== undefined && object.owner !== null) {
+      message.owner = object.owner;
+    } else {
+      message.owner = "";
     }
     return message;
   },

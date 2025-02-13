@@ -12,6 +12,7 @@ import { HistoryOrder } from "./types/tradebin/order"
 import { UserDust } from "./types/tradebin/order"
 import { Params } from "./types/tradebin/params"
 import { QueueMessage } from "./types/tradebin/queue_message"
+import { FillOrderItem } from "./types/tradebin/tx"
 
 
 export {     
@@ -29,5 +30,6 @@ export {
     UserDust,
     Params,
     QueueMessage,
+    FillOrderItem,
     
  }

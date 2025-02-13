@@ -7,21 +7,22 @@ import { msgTypes } from './registry';
 import { IgniteClient } from "../client"
 import { MissingWalletError } from "../helpers"
 import { Api } from "./rest";
+import { MsgFillOrders } from "./types/tradebin/tx";
 import { MsgCreateOrder } from "./types/tradebin/tx";
-import { MsgCancelOrder } from "./types/tradebin/tx";
 import { MsgCreateMarket } from "./types/tradebin/tx";
+import { MsgCancelOrder } from "./types/tradebin/tx";
 
 
-export { MsgCreateOrder, MsgCancelOrder, MsgCreateMarket };
+export { MsgFillOrders, MsgCreateOrder, MsgCreateMarket, MsgCancelOrder };
 
-type sendMsgCreateOrderParams = {
-  value: MsgCreateOrder,
+type sendMsgFillOrdersParams = {
+  value: MsgFillOrders,
   fee?: StdFee,
   memo?: string
 };
 
-type sendMsgCancelOrderParams = {
-  value: MsgCancelOrder,
+type sendMsgCreateOrderParams = {
+  value: MsgCreateOrder,
   fee?: StdFee,
   memo?: string
 };
@@ -32,17 +33,27 @@ type sendMsgCreateMarketParams = {
   memo?: string
 };
 
+type sendMsgCancelOrderParams = {
+  value: MsgCancelOrder,
+  fee?: StdFee,
+  memo?: string
+};
+
+
+type msgFillOrdersParams = {
+  value: MsgFillOrders,
+};
 
 type msgCreateOrderParams = {
   value: MsgCreateOrder,
 };
 
-type msgCancelOrderParams = {
-  value: MsgCancelOrder,
-};
-
 type msgCreateMarketParams = {
   value: MsgCreateMarket,
+};
+
+type msgCancelOrderParams = {
+  value: MsgCancelOrder,
 };
 
 
@@ -63,6 +74,20 @@ export const txClient = ({ signer, prefix, addr }: TxClientOptions = { addr: "ht
 
   return {
 		
+		async sendMsgFillOrders({ value, fee, memo }: sendMsgFillOrdersParams): Promise<DeliverTxResponse> {
+			if (!signer) {
+					throw new Error('TxClient:sendMsgFillOrders: Unable to sign Tx. Signer is not present.')
+			}
+			try {			
+				const { address } = (await signer.getAccounts())[0]; 
+				const signingClient = await SigningStargateClient.connectWithSigner(addr,signer,{registry, prefix});
+				let msg = this.msgFillOrders({ value: MsgFillOrders.fromPartial(value) })
+				return await signingClient.signAndBroadcast(address, [msg], fee ? fee : defaultFee, memo)
+			} catch (e: any) {
+				throw new Error('TxClient:sendMsgFillOrders: Could not broadcast Tx: '+ e.message)
+			}
+		},
+		
 		async sendMsgCreateOrder({ value, fee, memo }: sendMsgCreateOrderParams): Promise<DeliverTxResponse> {
 			if (!signer) {
 					throw new Error('TxClient:sendMsgCreateOrder: Unable to sign Tx. Signer is not present.')
@@ -74,20 +99,6 @@ export const txClient = ({ signer, prefix, addr }: TxClientOptions = { addr: "ht
 				return await signingClient.signAndBroadcast(address, [msg], fee ? fee : defaultFee, memo)
 			} catch (e: any) {
 				throw new Error('TxClient:sendMsgCreateOrder: Could not broadcast Tx: '+ e.message)
-			}
-		},
-		
-		async sendMsgCancelOrder({ value, fee, memo }: sendMsgCancelOrderParams): Promise<DeliverTxResponse> {
-			if (!signer) {
-					throw new Error('TxClient:sendMsgCancelOrder: Unable to sign Tx. Signer is not present.')
-			}
-			try {			
-				const { address } = (await signer.getAccounts())[0]; 
-				const signingClient = await SigningStargateClient.connectWithSigner(addr,signer,{registry, prefix});
-				let msg = this.msgCancelOrder({ value: MsgCancelOrder.fromPartial(value) })
-				return await signingClient.signAndBroadcast(address, [msg], fee ? fee : defaultFee, memo)
-			} catch (e: any) {
-				throw new Error('TxClient:sendMsgCancelOrder: Could not broadcast Tx: '+ e.message)
 			}
 		},
 		
@@ -105,6 +116,28 @@ export const txClient = ({ signer, prefix, addr }: TxClientOptions = { addr: "ht
 			}
 		},
 		
+		async sendMsgCancelOrder({ value, fee, memo }: sendMsgCancelOrderParams): Promise<DeliverTxResponse> {
+			if (!signer) {
+					throw new Error('TxClient:sendMsgCancelOrder: Unable to sign Tx. Signer is not present.')
+			}
+			try {			
+				const { address } = (await signer.getAccounts())[0]; 
+				const signingClient = await SigningStargateClient.connectWithSigner(addr,signer,{registry, prefix});
+				let msg = this.msgCancelOrder({ value: MsgCancelOrder.fromPartial(value) })
+				return await signingClient.signAndBroadcast(address, [msg], fee ? fee : defaultFee, memo)
+			} catch (e: any) {
+				throw new Error('TxClient:sendMsgCancelOrder: Could not broadcast Tx: '+ e.message)
+			}
+		},
+		
+		
+		msgFillOrders({ value }: msgFillOrdersParams): EncodeObject {
+			try {
+				return { typeUrl: "/bze.tradebin.v1.MsgFillOrders", value: MsgFillOrders.fromPartial( value ) }  
+			} catch (e: any) {
+				throw new Error('TxClient:MsgFillOrders: Could not create message: ' + e.message)
+			}
+		},
 		
 		msgCreateOrder({ value }: msgCreateOrderParams): EncodeObject {
 			try {
@@ -114,19 +147,19 @@ export const txClient = ({ signer, prefix, addr }: TxClientOptions = { addr: "ht
 			}
 		},
 		
-		msgCancelOrder({ value }: msgCancelOrderParams): EncodeObject {
-			try {
-				return { typeUrl: "/bze.tradebin.v1.MsgCancelOrder", value: MsgCancelOrder.fromPartial( value ) }  
-			} catch (e: any) {
-				throw new Error('TxClient:MsgCancelOrder: Could not create message: ' + e.message)
-			}
-		},
-		
 		msgCreateMarket({ value }: msgCreateMarketParams): EncodeObject {
 			try {
 				return { typeUrl: "/bze.tradebin.v1.MsgCreateMarket", value: MsgCreateMarket.fromPartial( value ) }  
 			} catch (e: any) {
 				throw new Error('TxClient:MsgCreateMarket: Could not create message: ' + e.message)
+			}
+		},
+		
+		msgCancelOrder({ value }: msgCancelOrderParams): EncodeObject {
+			try {
+				return { typeUrl: "/bze.tradebin.v1.MsgCancelOrder", value: MsgCancelOrder.fromPartial( value ) }  
+			} catch (e: any) {
+				throw new Error('TxClient:MsgCancelOrder: Could not create message: ' + e.message)
 			}
 		},
 		

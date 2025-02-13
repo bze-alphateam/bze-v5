@@ -249,16 +249,16 @@ export default {
 		},
 		
 		
-		async sendMsgStartRaffle({ rootGetters }, { value, fee = [], memo = '' }) {
+		async sendMsgJoinRaffle({ rootGetters }, { value, fee = [], memo = '' }) {
 			try {
 				const client=await initClient(rootGetters)
-				const result = await client.BzeBurnerV1.tx.sendMsgStartRaffle({ value, fee: {amount: fee, gas: "200000"}, memo })
+				const result = await client.BzeBurnerV1.tx.sendMsgJoinRaffle({ value, fee: {amount: fee, gas: "200000"}, memo })
 				return result
 			} catch (e) {
 				if (e == MissingWalletError) {
-					throw new Error('TxClient:MsgStartRaffle:Init Could not initialize signing client. Wallet is required.')
+					throw new Error('TxClient:MsgJoinRaffle:Init Could not initialize signing client. Wallet is required.')
 				}else{
-					throw new Error('TxClient:MsgStartRaffle:Send Could not broadcast Tx: '+ e.message)
+					throw new Error('TxClient:MsgJoinRaffle:Send Could not broadcast Tx: '+ e.message)
 				}
 			}
 		},
@@ -275,30 +275,30 @@ export default {
 				}
 			}
 		},
-		async sendMsgJoinRaffle({ rootGetters }, { value, fee = [], memo = '' }) {
+		async sendMsgStartRaffle({ rootGetters }, { value, fee = [], memo = '' }) {
 			try {
 				const client=await initClient(rootGetters)
-				const result = await client.BzeBurnerV1.tx.sendMsgJoinRaffle({ value, fee: {amount: fee, gas: "200000"}, memo })
+				const result = await client.BzeBurnerV1.tx.sendMsgStartRaffle({ value, fee: {amount: fee, gas: "200000"}, memo })
 				return result
 			} catch (e) {
 				if (e == MissingWalletError) {
-					throw new Error('TxClient:MsgJoinRaffle:Init Could not initialize signing client. Wallet is required.')
+					throw new Error('TxClient:MsgStartRaffle:Init Could not initialize signing client. Wallet is required.')
 				}else{
-					throw new Error('TxClient:MsgJoinRaffle:Send Could not broadcast Tx: '+ e.message)
+					throw new Error('TxClient:MsgStartRaffle:Send Could not broadcast Tx: '+ e.message)
 				}
 			}
 		},
 		
-		async MsgStartRaffle({ rootGetters }, { value }) {
+		async MsgJoinRaffle({ rootGetters }, { value }) {
 			try {
 				const client=initClient(rootGetters)
-				const msg = await client.BzeBurnerV1.tx.msgStartRaffle({value})
+				const msg = await client.BzeBurnerV1.tx.msgJoinRaffle({value})
 				return msg
 			} catch (e) {
 				if (e == MissingWalletError) {
-					throw new Error('TxClient:MsgStartRaffle:Init Could not initialize signing client. Wallet is required.')
+					throw new Error('TxClient:MsgJoinRaffle:Init Could not initialize signing client. Wallet is required.')
 				} else{
-					throw new Error('TxClient:MsgStartRaffle:Create Could not create message: ' + e.message)
+					throw new Error('TxClient:MsgJoinRaffle:Create Could not create message: ' + e.message)
 				}
 			}
 		},
@@ -315,16 +315,16 @@ export default {
 				}
 			}
 		},
-		async MsgJoinRaffle({ rootGetters }, { value }) {
+		async MsgStartRaffle({ rootGetters }, { value }) {
 			try {
 				const client=initClient(rootGetters)
-				const msg = await client.BzeBurnerV1.tx.msgJoinRaffle({value})
+				const msg = await client.BzeBurnerV1.tx.msgStartRaffle({value})
 				return msg
 			} catch (e) {
 				if (e == MissingWalletError) {
-					throw new Error('TxClient:MsgJoinRaffle:Init Could not initialize signing client. Wallet is required.')
+					throw new Error('TxClient:MsgStartRaffle:Init Could not initialize signing client. Wallet is required.')
 				} else{
-					throw new Error('TxClient:MsgJoinRaffle:Create Could not create message: ' + e.message)
+					throw new Error('TxClient:MsgStartRaffle:Create Could not create message: ' + e.message)
 				}
 			}
 		},
