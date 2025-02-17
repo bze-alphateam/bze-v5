@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/bze-alphateam/bze/x/tradebin/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	"time"
 )
 
 func getRandomOrder(amt int64) types.Order {
@@ -89,7 +90,7 @@ func (suite *IntegrationTestSuite) TestNewOrder() {
 			Owner:     c.Owner,
 		}
 		beforeCounter := suite.k.GetOrderCounter(suite.ctx)
-		savedOrder := suite.k.NewOrder(suite.ctx, order)
+		savedOrder := suite.k.NewOrder(suite.ctx.WithBlockTime(time.Now()), order)
 		afterCounter := suite.k.GetOrderCounter(suite.ctx)
 		suite.Require().Equal(beforeCounter, afterCounter-1)
 		suite.Require().Equal(order.MarketId, savedOrder.MarketId)

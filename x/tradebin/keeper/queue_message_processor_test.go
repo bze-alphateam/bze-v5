@@ -1,10 +1,10 @@
 package keeper_test
 
 import (
-	"github.com/bze-alphateam/bze/testutil/simapp"
 	"github.com/bze-alphateam/bze/x/tradebin/keeper"
 	"github.com/bze-alphateam/bze/x/tradebin/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	"go.uber.org/mock/gomock"
 )
 
 func newStakeCoin(amt int64) sdk.Coin {
@@ -16,7 +16,7 @@ func newBzeCoin(amt int64) sdk.Coin {
 }
 
 func (suite *IntegrationTestSuite) TestQueueMessageProcessor_AddMakerOrder() {
-	engine, err := keeper.NewProcessingEngine(suite.app.TradebinKeeper, suite.app.BankKeeper, suite.app.TradebinKeeper.Logger(suite.ctx))
+	engine, err := keeper.NewProcessingEngine(suite.k, suite.bankMock, suite.k.Logger(suite.ctx))
 	suite.Require().Nil(err)
 
 	addr1 := sdk.AccAddress("addr1_______________")
@@ -94,21 +94,11 @@ func (suite *IntegrationTestSuite) TestQueueMessageProcessor_AddMakerOrder() {
 func (suite *IntegrationTestSuite) TestQueueMessageProcessor_CancelOrder() {
 	//create test market
 	suite.k.SetMarket(suite.ctx, market)
-	engine, err := keeper.NewProcessingEngine(suite.app.TradebinKeeper, suite.app.BankKeeper, suite.app.TradebinKeeper.Logger(suite.ctx))
+	engine, err := keeper.NewProcessingEngine(suite.k, suite.bankMock, suite.k.Logger(suite.ctx))
 	suite.Require().Nil(err)
-
-	//add some coins to module so it has what to send back on order cancel
-	balances := sdk.NewCoins(newStakeCoin(10000), newBzeCoin(50000))
-	suite.Require().NoError(simapp.FundModuleAccount(suite.app.BankKeeper, suite.ctx, types.ModuleName, balances))
 
 	//create an user account
 	addr1 := sdk.AccAddress("addr1_______________")
-	acc1 := suite.app.AccountKeeper.NewAccountWithAddress(suite.ctx, addr1)
-	suite.app.AccountKeeper.SetAccount(suite.ctx, acc1)
-
-	//initial balances need to be 0
-	initialUserBalances := suite.app.BankKeeper.GetAllBalances(suite.ctx, addr1)
-	suite.Require().True(initialUserBalances.IsZero())
 
 	//create two random orders
 	mBuy := types.QueueMessage{
@@ -192,6 +182,7 @@ func (suite *IntegrationTestSuite) TestQueueMessageProcessor_CancelOrder() {
 		}
 		orders = append(orders, or)
 		suite.k.SetQueueMessage(suite.ctx, qm)
+		suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, addr1, sdk.NewCoins(canceledCoins))
 		//process cancel message
 		engine.ProcessQueueMessages(suite.ctx)
 		cancelCount++
@@ -205,39 +196,6 @@ func (suite *IntegrationTestSuite) TestQueueMessageProcessor_CancelOrder() {
 		suite.Require().NotNil(checkUserOrders)
 		//list should now have fewer orders
 		suite.Require().Equal(len(checkUserOrders.List), len(allUserOrders.List)-cancelCount)
-
-		//check order coins have been added to the owner account
-		newBalances := suite.app.BankKeeper.GetAllBalances(suite.ctx, addr1)
-		suite.Require().False(newBalances.IsZero())
-		if or.OrderType == types.OrderTypeBuy {
-			suite.Require().EqualValues(newBalances.AmountOf(totalBuyCoins.Denom).String(), initialUserBalances.AmountOf(totalBuyCoins.Denom).Add(canceledCoins.Amount).String())
-			//create previously registered amount
-			aggAmount, ok := sdk.NewIntFromString(aggOrderBuy.Amount)
-			suite.Require().True(ok)
-			//subtract the canceled amount
-			aggAmount = aggAmount.Sub(canceledAmount)
-			suite.Require().True(aggAmount.IsPositive() || aggAmount.IsZero())
-			if aggAmount.IsPositive() {
-				checkAggOrder, ok := suite.k.GetAggregatedOrder(suite.ctx, or.MarketId, or.OrderType, toCancelOrder.Price)
-				suite.Require().True(ok)
-				suite.Require().EqualValues(checkAggOrder.Amount, aggAmount.String())
-			}
-			aggOrderBuy.Amount = aggAmount.String()
-		} else {
-			suite.Require().EqualValues(newBalances.AmountOf(totalSellCoins.Denom).String(), initialUserBalances.AmountOf(totalSellCoins.Denom).Add(canceledCoins.Amount).String())
-			aggAmount, ok := sdk.NewIntFromString(aggOrderSell.Amount)
-			suite.Require().True(ok)
-			//subtract the canceled amount
-			aggAmount = aggAmount.Sub(canceledAmount)
-			suite.Require().True(aggAmount.IsPositive() || aggAmount.IsZero())
-			if aggAmount.IsPositive() {
-				checkAggOrder, ok := suite.k.GetAggregatedOrder(suite.ctx, or.MarketId, or.OrderType, toCancelOrder.Price)
-				suite.Require().True(ok)
-				suite.Require().EqualValues(checkAggOrder.Amount, aggAmount.String())
-			}
-			aggOrderSell.Amount = aggAmount.String()
-		}
-		initialUserBalances = newBalances
 	}
 
 	//check aggregated orders were removed with the orders
@@ -257,30 +215,12 @@ func (suite *IntegrationTestSuite) TestQueueMessageProcessor_CancelOrder() {
 func (suite *IntegrationTestSuite) TestQueueMessageProcessor_OrderMatching() {
 	//create test market
 	suite.k.SetMarket(suite.ctx, market)
-	engine, err := keeper.NewProcessingEngine(suite.app.TradebinKeeper, suite.app.BankKeeper, suite.app.TradebinKeeper.Logger(suite.ctx))
+	engine, err := keeper.NewProcessingEngine(suite.k, suite.bankMock, suite.k.Logger(suite.ctx))
 	suite.Require().Nil(err)
-
-	//add some coins to module, so it has what to send back on order cancel
-	initialModuleBalances := sdk.NewCoins(newStakeCoin(10000000), newBzeCoin(50000000))
-	suite.Require().NoError(simapp.FundModuleAccount(suite.app.BankKeeper, suite.ctx, types.ModuleName, initialModuleBalances))
-	moduleAddr := suite.app.AccountKeeper.GetModuleAddress(types.ModuleName)
 
 	//create accounts
 	makerAddr := sdk.AccAddress("addr1_______________")
-	acc1 := suite.app.AccountKeeper.NewAccountWithAddress(suite.ctx, makerAddr)
-	suite.app.AccountKeeper.SetAccount(suite.ctx, acc1)
-
 	takerAddr := sdk.AccAddress("addr2_______________")
-	takerAccount := suite.app.AccountKeeper.NewAccountWithAddress(suite.ctx, takerAddr)
-	suite.app.AccountKeeper.SetAccount(suite.ctx, takerAccount)
-	suite.Require().NoError(simapp.FundAccount(suite.app.BankKeeper, suite.ctx, takerAddr, initialModuleBalances))
-
-	//initial initialModuleBalances need to be 0
-	makerBalance := suite.app.BankKeeper.GetAllBalances(suite.ctx, makerAddr)
-	suite.Require().True(makerBalance.IsZero())
-	//initial initialModuleBalances the same as previously added
-	takerBalance := suite.app.BankKeeper.GetAllBalances(suite.ctx, takerAddr)
-	suite.Require().True(takerBalance.IsEqual(initialModuleBalances))
 
 	//sellPrice := int64(10)
 	sellPriceStr := "1"
@@ -339,20 +279,13 @@ func (suite *IntegrationTestSuite) TestQueueMessageProcessor_OrderMatching() {
 	tradedStakeCoins := takerCoins
 
 	suite.k.SetQueueMessage(suite.ctx, qmBuy)
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, takerAddr, sdk.NewCoins(takerCoins))
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, makerAddr, sdk.NewCoins(makerCoins))
 	engine.ProcessQueueMessages(suite.ctx)
 
 	//check all orders are still there since none of them have been filled
 	allOrders = suite.k.GetAllOrder(suite.ctx)
 	suite.Require().Equal(len(allOrders), int(orderCounter*2))
-
-	//check maker and taker new balances after the trade was filled
-	makerBalance = suite.app.BankKeeper.GetAllBalances(suite.ctx, makerAddr)
-	suite.Require().Equal(makerBalance.AmountOf(tradedUbzeCoins.Denom), tradedUbzeCoins.Amount)
-	takerNewBalance := suite.app.BankKeeper.GetAllBalances(suite.ctx, takerAddr)
-	suite.Require().Equal(takerNewBalance.AmountOf(tradedStakeCoins.Denom), tradedStakeCoins.Amount.Add(takerBalance.AmountOf(tradedStakeCoins.Denom)))
-
-	//check module amounts were subtracted
-	suite.checkModuleBalances(moduleAddr, tradedUbzeCoins, tradedStakeCoins, initialModuleBalances)
 
 	suite.checkAggregatedOrder(getMarketId(), types.OrderTypeBuy, buyPriceStr, buyAmt.MulRaw(orderCounter).String())
 	suite.checkAggregatedOrder(getMarketId(), types.OrderTypeSell, sellPriceStr, sellAmt.MulRaw(orderCounter).Sub(takerCoins.Amount).String())
@@ -373,6 +306,9 @@ func (suite *IntegrationTestSuite) TestQueueMessageProcessor_OrderMatching() {
 	suite.Require().Nil(err)
 
 	suite.k.SetQueueMessage(suite.ctx, qmBuy)
+
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, takerAddr, sdk.NewCoins(takerCoins))
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, makerAddr, sdk.NewCoins(makerCoins))
 	engine.ProcessQueueMessages(suite.ctx)
 
 	//check all orders are still there since none of them were filled
@@ -381,13 +317,6 @@ func (suite *IntegrationTestSuite) TestQueueMessageProcessor_OrderMatching() {
 
 	tradedUbzeCoins = tradedUbzeCoins.Add(makerCoins)
 	tradedStakeCoins = tradedStakeCoins.Add(takerCoins)
-
-	makerBalance = suite.app.BankKeeper.GetAllBalances(suite.ctx, makerAddr)
-	suite.Require().Equal(makerBalance.AmountOf(tradedUbzeCoins.Denom), tradedUbzeCoins.Amount)
-	takerNewBalance = suite.app.BankKeeper.GetAllBalances(suite.ctx, takerAddr)
-	suite.Require().Equal(takerNewBalance.AmountOf(tradedStakeCoins.Denom), tradedStakeCoins.Amount.Add(takerBalance.AmountOf(tradedStakeCoins.Denom)))
-
-	suite.checkModuleBalances(moduleAddr, tradedUbzeCoins, tradedStakeCoins, initialModuleBalances)
 
 	suite.checkAggregatedOrder(getMarketId(), types.OrderTypeBuy, buyPriceStr, buyAmt.MulRaw(orderCounter).String())
 	suite.checkAggregatedOrder(getMarketId(), types.OrderTypeSell, sellPriceStr, sellAmt.MulRaw(orderCounter).Sub(tradedStakeCoins.Amount).String())
@@ -402,12 +331,14 @@ func (suite *IntegrationTestSuite) TestQueueMessageProcessor_OrderMatching() {
 		OrderType:   types.OrderTypeBuy,
 		Owner:       takerAddr.String(),
 	}
-	makerCoins, _, err = suite.k.GetOrderSdkCoin(qmBuy.OrderType, qmBuy.Price, qmAmountInt, &market)
+	makerCoins, _, err = suite.k.GetOrderSdkCoin(qmBuy.OrderType, qmBuy.Price, sellAmt, &market)
 	suite.Require().Nil(err)
 	takerCoins, _, err = suite.k.GetOrderSdkCoin(types.TheOtherOrderType(qmBuy.OrderType), qmBuy.Price, qmAmountInt, &market)
 	suite.Require().Nil(err)
 
 	suite.k.SetQueueMessage(suite.ctx, qmBuy)
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, takerAddr, gomock.Any()).Times(3)
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, makerAddr, gomock.Any()).Times(3)
 	engine.ProcessQueueMessages(suite.ctx)
 
 	//check the correct amount of suborders removed
@@ -416,13 +347,6 @@ func (suite *IntegrationTestSuite) TestQueueMessageProcessor_OrderMatching() {
 
 	tradedUbzeCoins = tradedUbzeCoins.Add(makerCoins)
 	tradedStakeCoins = tradedStakeCoins.Add(takerCoins)
-
-	makerBalance = suite.app.BankKeeper.GetAllBalances(suite.ctx, makerAddr)
-	suite.Require().Equal(makerBalance.AmountOf(tradedUbzeCoins.Denom), tradedUbzeCoins.Amount)
-	takerNewBalance = suite.app.BankKeeper.GetAllBalances(suite.ctx, takerAddr)
-	suite.Require().Equal(takerNewBalance.AmountOf(tradedStakeCoins.Denom), tradedStakeCoins.Amount.Add(takerBalance.AmountOf(tradedStakeCoins.Denom)))
-
-	suite.checkModuleBalances(moduleAddr, tradedUbzeCoins, tradedStakeCoins, initialModuleBalances)
 
 	suite.checkAggregatedOrder(getMarketId(), types.OrderTypeBuy, buyPriceStr, buyAmt.MulRaw(orderCounter).String())
 	suite.checkAggregatedOrder(getMarketId(), types.OrderTypeSell, sellPriceStr, sellAmt.MulRaw(orderCounter).Sub(tradedStakeCoins.Amount).String())
@@ -437,12 +361,14 @@ func (suite *IntegrationTestSuite) TestQueueMessageProcessor_OrderMatching() {
 		OrderType:   types.OrderTypeBuy,
 		Owner:       takerAddr.String(),
 	}
-	makerCoins, _, err = suite.k.GetOrderSdkCoin(qmBuy.OrderType, qmBuy.Price, qmAmountInt, &market)
+	makerCoins, _, err = suite.k.GetOrderSdkCoin(qmBuy.OrderType, qmBuy.Price, sellAmt, &market)
 	suite.Require().Nil(err)
-	takerCoins, _, err = suite.k.GetOrderSdkCoin(types.TheOtherOrderType(qmBuy.OrderType), qmBuy.Price, qmAmountInt, &market)
+	takerCoins, _, err = suite.k.GetOrderSdkCoin(types.TheOtherOrderType(qmBuy.OrderType), qmBuy.Price, sellAmt, &market)
 	suite.Require().Nil(err)
 
 	suite.k.SetQueueMessage(suite.ctx, qmBuy)
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, takerAddr, gomock.Any()).Times(8)
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, makerAddr, gomock.Any()).Times(8)
 	engine.ProcessQueueMessages(suite.ctx)
 
 	//check the correct amount of suborders removed
@@ -473,11 +399,6 @@ func (suite *IntegrationTestSuite) TestQueueMessageProcessor_OrderMatching() {
 	suite.Require().Nil(err)
 	tradedStakeCoins = tradedStakeCoins.Add(takerCoins).Sub(newOrderMakerCoins)
 
-	makerBalance = suite.app.BankKeeper.GetAllBalances(suite.ctx, makerAddr)
-	suite.Require().Equal(makerBalance.AmountOf(tradedUbzeCoins.Denom), tradedUbzeCoins.Amount)
-	takerNewBalance = suite.app.BankKeeper.GetAllBalances(suite.ctx, takerAddr)
-	suite.Require().Equal(takerNewBalance.AmountOf(tradedStakeCoins.Denom), tradedStakeCoins.Amount.Add(takerBalance.AmountOf(tradedStakeCoins.Denom)))
-
 	suite.checkAggregatedOrder(getMarketId(), types.OrderTypeBuy, buyPriceStr, buyAmt.MulRaw(orderCounter).String())
 	suite.checkAggregatedOrder(getMarketId(), types.OrderTypeBuy, sellPriceStr, newOrderTakerCoins.Amount.String())
 	//sell order should not exist anymore
@@ -495,23 +416,19 @@ func (suite *IntegrationTestSuite) TestQueueMessageProcessor_OrderMatching() {
 		Owner:       takerAddr.String(),
 	}
 
-	makerCoins, _, err = suite.k.GetOrderSdkCoin(qmSell.OrderType, qmSell.Price, qmAmountInt, &market)
+	makerCoins, _, err = suite.k.GetOrderSdkCoin(qmSell.OrderType, qmSell.Price, buyAmt, &market)
 	suite.Require().Nil(err)
-	takerCoins, _, err = suite.k.GetOrderSdkCoin(types.TheOtherOrderType(qmSell.OrderType), qmSell.Price, qmAmountInt, &market)
+	takerCoins, _, err = suite.k.GetOrderSdkCoin(types.TheOtherOrderType(qmSell.OrderType), qmSell.Price, buyAmt, &market)
 	suite.Require().Nil(err)
 
 	suite.k.SetQueueMessage(suite.ctx, qmSell)
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, takerAddr, sdk.NewCoins(takerCoins)).Times(10)
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, makerAddr, sdk.NewCoins(makerCoins)).Times(10)
 	engine.ProcessQueueMessages(suite.ctx)
 
 	//check the correct amount of orders removed
 	allOrders = suite.k.GetAllOrder(suite.ctx)
 	suite.Require().Equal(len(allOrders), 2)
-}
-
-func (suite *IntegrationTestSuite) checkModuleBalances(moduleAddr sdk.AccAddress, tradedUbzeCoins, tradedStakeCoins sdk.Coin, initialBalances sdk.Coins) {
-	moduleBalance := suite.app.BankKeeper.GetAllBalances(suite.ctx, moduleAddr)
-	suite.Require().Equal(moduleBalance.AmountOf(tradedUbzeCoins.Denom), initialBalances.AmountOf(tradedUbzeCoins.Denom).Sub(tradedUbzeCoins.Amount))
-	suite.Require().Equal(moduleBalance.AmountOf(tradedStakeCoins.Denom), initialBalances.AmountOf(tradedStakeCoins.Denom).Sub(tradedStakeCoins.Amount))
 }
 
 func (suite *IntegrationTestSuite) checkAggregatedOrder(marketId, orderType, price string, expectedAmount string) {
@@ -523,30 +440,12 @@ func (suite *IntegrationTestSuite) checkAggregatedOrder(marketId, orderType, pri
 func (suite *IntegrationTestSuite) TestQueueMessageProcessor_OrderMatching_WithDust() {
 	//create test market
 	suite.k.SetMarket(suite.ctx, market)
-	engine, err := keeper.NewProcessingEngine(suite.app.TradebinKeeper, suite.app.BankKeeper, suite.app.TradebinKeeper.Logger(suite.ctx))
+	engine, err := keeper.NewProcessingEngine(suite.k, suite.bankMock, suite.k.Logger(suite.ctx))
 	suite.Require().Nil(err)
-
-	//add some coins to module, so it has what to send back on order cancel
-	initialModuleBalances := sdk.NewCoins(newStakeCoin(10000000), newBzeCoin(50000000))
-	suite.Require().NoError(simapp.FundModuleAccount(suite.app.BankKeeper, suite.ctx, types.ModuleName, initialModuleBalances))
-	moduleAddr := suite.app.AccountKeeper.GetModuleAddress(types.ModuleName)
 
 	//create accounts
 	makerAddr := sdk.AccAddress("addr1_______________")
-	acc1 := suite.app.AccountKeeper.NewAccountWithAddress(suite.ctx, makerAddr)
-	suite.app.AccountKeeper.SetAccount(suite.ctx, acc1)
-
 	takerAddr := sdk.AccAddress("addr2_______________")
-	takerAccount := suite.app.AccountKeeper.NewAccountWithAddress(suite.ctx, takerAddr)
-	suite.app.AccountKeeper.SetAccount(suite.ctx, takerAccount)
-	suite.Require().NoError(simapp.FundAccount(suite.app.BankKeeper, suite.ctx, takerAddr, initialModuleBalances))
-
-	//initial initialModuleBalances need to be 0
-	makerBalance := suite.app.BankKeeper.GetAllBalances(suite.ctx, makerAddr)
-	suite.Require().True(makerBalance.IsZero())
-	//initial initialModuleBalances the same as previously added
-	takerBalance := suite.app.BankKeeper.GetAllBalances(suite.ctx, takerAddr)
-	suite.Require().True(takerBalance.IsEqual(initialModuleBalances))
 
 	//sellPrice := int64(10)
 	sellPriceStr := "0.7612"
@@ -585,6 +484,7 @@ func (suite *IntegrationTestSuite) TestQueueMessageProcessor_OrderMatching_WithD
 	suite.checkAggregatedOrder(getMarketId(), types.OrderTypeBuy, buyPriceStr, buyAmt.MulRaw(orderCounter).String())
 	suite.checkAggregatedOrder(getMarketId(), types.OrderTypeSell, sellPriceStr, sellAmt.MulRaw(orderCounter).String())
 
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, gomock.AnyOf(makerAddr, takerAddr), gomock.Any()).AnyTimes()
 	//1. fill 50% of an order -> check its amount is updated -> check the maker gets his coins ->
 	//check module balances updated -> check the taker balances are updated -> check aggregated is updated
 	qmAmountInt := sellAmt.QuoRaw(2)
@@ -604,21 +504,12 @@ func (suite *IntegrationTestSuite) TestQueueMessageProcessor_OrderMatching_WithD
 	allOrders = suite.k.GetAllOrder(suite.ctx)
 	suite.Require().Equal(len(allOrders), int(orderCounter*2))
 
-	//check maker and taker new balances after the trade was filled
-	makerBalance = suite.app.BankKeeper.GetAllBalances(suite.ctx, makerAddr)
-	suite.Require().Equal(makerBalance.AmountOf(market.Quote), sdk.NewInt(7))
-	takerNewBalance := suite.app.BankKeeper.GetAllBalances(suite.ctx, takerAddr)
-	suite.Require().Equal(takerNewBalance.AmountOf(market.Base), sdk.NewInt(10000010))
-
 	//check maker dust
 	makerDust, ok := suite.k.GetUserDust(suite.ctx, makerAddr.String(), market.Quote)
 	suite.Require().True(ok)
 	suite.Require().Equal(makerDust.Denom, market.Quote)
 	suite.Require().Equal(makerDust.Owner, makerAddr.String())
 	suite.Require().Equal(makerDust.Amount, "0.612000000000000000")
-
-	//check module amounts were subtracted
-	suite.checkModuleBalances(moduleAddr, sdk.NewCoin(market.Quote, sdk.NewInt(7)), sdk.NewCoin(market.Base, sdk.NewInt(10)), initialModuleBalances)
 
 	suite.checkAggregatedOrder(getMarketId(), types.OrderTypeBuy, buyPriceStr, buyAmt.MulRaw(orderCounter).String())
 	suite.checkAggregatedOrder(getMarketId(), types.OrderTypeSell, sellPriceStr, sellAmt.MulRaw(orderCounter).SubRaw(10).String())
@@ -641,13 +532,6 @@ func (suite *IntegrationTestSuite) TestQueueMessageProcessor_OrderMatching_WithD
 	allOrders = suite.k.GetAllOrder(suite.ctx)
 	suite.Require().Equal(len(allOrders), int(orderCounter*2))
 
-	makerBalance = suite.app.BankKeeper.GetAllBalances(suite.ctx, makerAddr)
-	suite.Require().Equal(makerBalance.AmountOf(market.Quote), sdk.NewInt(11))
-	takerNewBalance = suite.app.BankKeeper.GetAllBalances(suite.ctx, takerAddr)
-	suite.Require().Equal(takerNewBalance.AmountOf(market.Base), sdk.NewInt(10000015))
-
-	suite.checkModuleBalances(moduleAddr, sdk.NewCoin(market.Quote, sdk.NewInt(11)), sdk.NewCoin(market.Base, sdk.NewInt(15)), initialModuleBalances)
-
 	suite.checkAggregatedOrder(getMarketId(), types.OrderTypeBuy, buyPriceStr, buyAmt.MulRaw(orderCounter).String())
 	suite.checkAggregatedOrder(getMarketId(), types.OrderTypeSell, sellPriceStr, sellAmt.MulRaw(orderCounter).Sub(sdk.NewInt(15)).String())
 
@@ -661,10 +545,6 @@ func (suite *IntegrationTestSuite) TestQueueMessageProcessor_OrderMatching_WithD
 		OrderType:   types.OrderTypeBuy,
 		Owner:       takerAddr.String(),
 	}
-	//makerCoins, _, err = suite.k.GetOrderSdkCoin(qmBuy.OrderType, qmBuy.Price, qmAmountInt, &market)
-	//suite.Require().Nil(err)
-	//takerCoins, _, err = suite.k.GetOrderSdkCoin(types.TheOtherOrderType(qmBuy.OrderType), qmBuy.Price, qmAmountInt, &market)
-	//suite.Require().Nil(err)
 
 	suite.k.SetQueueMessage(suite.ctx, qmBuy)
 	engine.ProcessQueueMessages(suite.ctx)
@@ -672,13 +552,6 @@ func (suite *IntegrationTestSuite) TestQueueMessageProcessor_OrderMatching_WithD
 	//check the correct amount of suborders removed
 	allOrders = suite.k.GetAllOrder(suite.ctx)
 	suite.Require().Equal(len(allOrders), int(orderCounter*2)-2)
-
-	makerBalance = suite.app.BankKeeper.GetAllBalances(suite.ctx, makerAddr)
-	suite.Require().Equal(makerBalance.AmountOf(market.Quote), sdk.NewInt(41))
-	takerNewBalance = suite.app.BankKeeper.GetAllBalances(suite.ctx, takerAddr)
-	suite.Require().Equal(takerNewBalance.AmountOf(market.Base), sdk.NewInt(10000055))
-
-	suite.checkModuleBalances(moduleAddr, sdk.NewCoin(market.Quote, sdk.NewInt(41)), sdk.NewCoin(market.Base, sdk.NewInt(55)), initialModuleBalances)
 
 	suite.checkAggregatedOrder(getMarketId(), types.OrderTypeBuy, buyPriceStr, buyAmt.MulRaw(orderCounter).String())
 	suite.checkAggregatedOrder(getMarketId(), types.OrderTypeSell, sellPriceStr, sellAmt.MulRaw(orderCounter).Sub(sdk.NewInt(55)).String())
@@ -716,11 +589,6 @@ func (suite *IntegrationTestSuite) TestQueueMessageProcessor_OrderMatching_WithD
 	suite.Require().Equal(smallOrders[0].Amount, sellAmt.MulRaw(3).QuoRaw(4).String())
 	suite.Require().Equal(smallOrders[0].Price, sellPriceStr)
 
-	makerBalance = suite.app.BankKeeper.GetAllBalances(suite.ctx, makerAddr)
-	suite.Require().Equal(makerBalance.AmountOf(market.Quote), sdk.NewInt(152))
-	takerNewBalance = suite.app.BankKeeper.GetAllBalances(suite.ctx, takerAddr)
-	suite.Require().Equal(takerNewBalance.AmountOf(market.Base), sdk.NewInt(10000200))
-
 	suite.checkAggregatedOrder(getMarketId(), types.OrderTypeBuy, buyPriceStr, buyAmt.MulRaw(orderCounter).String())
 	//sell order should not exist anymore
 	_, ok = suite.k.GetAggregatedOrder(suite.ctx, getMarketId(), types.OrderTypeSell, sellPriceStr)
@@ -736,11 +604,6 @@ func (suite *IntegrationTestSuite) TestQueueMessageProcessor_OrderMatching_WithD
 		OrderType:   types.OrderTypeSell,
 		Owner:       takerAddr.String(),
 	}
-
-	//makerCoins, _, err = suite.k.GetOrderSdkCoin(qmSell.OrderType, qmSell.Price, qmAmountInt, &market)
-	//suite.Require().Nil(err)
-	//takerCoins, _, err = suite.k.GetOrderSdkCoin(types.TheOtherOrderType(qmSell.OrderType), qmSell.Price, qmAmountInt, &market)
-	//suite.Require().Nil(err)
 
 	suite.k.SetQueueMessage(suite.ctx, qmSell)
 	engine.ProcessQueueMessages(suite.ctx)

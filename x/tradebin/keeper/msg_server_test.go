@@ -138,6 +138,7 @@ func (suite *IntegrationTestSuite) TestCreateMarket_InvalidDenom() {
 	})
 	suite.Require().NotNil(err)
 
+	suite.bankMock.EXPECT().HasSupply(gomock.Any(), gomock.AnyOf(denomStake, denomBze)).Return(false).Times(1)
 	//denom has no supply
 	_, err = suite.msgServer.CreateMarket(goCtx, &types.MsgCreateMarket{
 		Creator: "me",
