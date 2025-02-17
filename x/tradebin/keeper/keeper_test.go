@@ -2,14 +2,16 @@ package keeper_test
 
 import (
 	"fmt"
+	keepertest "github.com/bze-alphateam/bze/testutil/keeper"
 	"github.com/bze-alphateam/bze/testutil/simapp"
 	"github.com/bze-alphateam/bze/x/tradebin/keeper"
+	"github.com/bze-alphateam/bze/x/tradebin/testutil"
 	"github.com/bze-alphateam/bze/x/tradebin/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
+	"go.uber.org/mock/gomock"
 	"testing"
-	"time"
 )
 
 const (
@@ -30,21 +32,34 @@ func getMarketId() string {
 type IntegrationTestSuite struct {
 	suite.Suite
 
-	app       *simapp.SimApp
+	app *simapp.SimApp
+
+	bankMock  *testutil.MockBankKeeper
+	distrMock *testutil.MockDistrKeeper
 	ctx       sdk.Context
 	k         *keeper.Keeper
 	msgServer types.MsgServer
 }
 
 func (suite *IntegrationTestSuite) SetupTest() {
-	app := simapp.Setup(false, true)
-	ctx := app.BaseApp.NewContext(false, tmproto.Header{Time: time.Now()})
+	t := suite.T()
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
 
-	suite.app = app
+	mockBank := testutil.NewMockBankKeeper(mockCtrl)
+	require.NotNil(t, mockBank)
+
+	mockDistr := testutil.NewMockDistrKeeper(mockCtrl)
+	require.NotNil(t, mockBank)
+
+	k, ctx := keepertest.TradebinKeeper(t, mockBank, mockDistr)
+
 	suite.ctx = ctx
 
-	suite.k = &app.TradebinKeeper
-	suite.msgServer = keeper.NewMsgServerImpl(app.TradebinKeeper)
+	suite.k = k
+	suite.bankMock = mockBank
+	suite.distrMock = mockDistr
+	suite.msgServer = keeper.NewMsgServerImpl(*k)
 }
 
 func TestKeeperSuite(t *testing.T) {

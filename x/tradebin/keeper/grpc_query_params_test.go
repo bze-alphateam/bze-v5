@@ -1,6 +1,8 @@
 package keeper_test
 
 import (
+	"github.com/bze-alphateam/bze/x/tradebin/testutil"
+	"go.uber.org/mock/gomock"
 	"testing"
 
 	testkeeper "github.com/bze-alphateam/bze/testutil/keeper"
@@ -10,12 +12,22 @@ import (
 )
 
 func TestParamsQuery(t *testing.T) {
-	keeper, ctx := testkeeper.TradebinKeeper(t)
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	mockBank := testutil.NewMockBankKeeper(mockCtrl)
+	require.NotNil(t, mockBank)
+
+	mockDistr := testutil.NewMockDistrKeeper(mockCtrl)
+	require.NotNil(t, mockBank)
+
+	k, ctx := testkeeper.TradebinKeeper(t, mockBank, mockDistr)
+
 	wctx := sdk.WrapSDKContext(ctx)
 	params := types.DefaultParams()
-	keeper.SetParams(ctx, params)
+	k.SetParams(ctx, params)
 
-	response, err := keeper.Params(wctx, &types.QueryParamsRequest{})
+	response, err := k.Params(wctx, &types.QueryParamsRequest{})
 	require.NoError(t, err)
 	require.Equal(t, &types.QueryParamsResponse{Params: params}, response)
 }

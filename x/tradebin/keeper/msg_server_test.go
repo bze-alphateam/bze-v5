@@ -2,14 +2,217 @@ package keeper_test
 
 import (
 	"fmt"
-	"github.com/bze-alphateam/bze/testutil/simapp"
 	"github.com/bze-alphateam/bze/x/tradebin/keeper"
 	"github.com/bze-alphateam/bze/x/tradebin/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/tendermint/tendermint/libs/rand"
+	"go.uber.org/mock/gomock"
 	"strconv"
 	"time"
 )
+
+func (suite *IntegrationTestSuite) TestCancelOrder_MarketNotFound() {
+	goCtx := sdk.WrapSDKContext(suite.ctx)
+	_, err := suite.msgServer.CancelOrder(goCtx, &types.MsgCancelOrder{
+		Creator:   "me",
+		MarketId:  "me/me",
+		OrderId:   "",
+		OrderType: "",
+	})
+	suite.Require().NotNil(err)
+}
+
+func (suite *IntegrationTestSuite) TestCancelOrder_OrderNotFound() {
+	suite.k.SetMarket(suite.ctx, market)
+	goCtx := sdk.WrapSDKContext(suite.ctx)
+	_, err := suite.msgServer.CancelOrder(goCtx, &types.MsgCancelOrder{
+		Creator:   "me",
+		MarketId:  getMarketId(),
+		OrderId:   "123",
+		OrderType: "dsa",
+	})
+	suite.Require().NotNil(err)
+}
+
+func (suite *IntegrationTestSuite) TestCancelOrder_Unauthorized() {
+	suite.k.SetMarket(suite.ctx, market)
+	order := suite.k.NewOrder(suite.ctx, types.Order{
+		MarketId:  getMarketId(),
+		OrderType: types.OrderTypeBuy,
+		Amount:    "102",
+		Price:     "1",
+		Owner:     "me",
+	})
+
+	goCtx := sdk.WrapSDKContext(suite.ctx)
+	_, err := suite.msgServer.CancelOrder(goCtx, &types.MsgCancelOrder{
+		Creator:   "not_me",
+		MarketId:  getMarketId(),
+		OrderId:   order.Id,
+		OrderType: types.OrderTypeBuy,
+	})
+	suite.Require().NotNil(err)
+}
+
+func (suite *IntegrationTestSuite) TestCancelOrder_CancelBuy_Success() {
+	suite.k.SetMarket(suite.ctx, market)
+	order := suite.k.NewOrder(suite.ctx, types.Order{
+		MarketId:  getMarketId(),
+		OrderType: types.OrderTypeBuy,
+		Amount:    "102000",
+		Price:     "1",
+		Owner:     "me",
+	})
+
+	goCtx := sdk.WrapSDKContext(suite.ctx)
+	_, err := suite.msgServer.CancelOrder(goCtx, &types.MsgCancelOrder{
+		Creator:   "me",
+		MarketId:  getMarketId(),
+		OrderId:   order.Id,
+		OrderType: types.OrderTypeBuy,
+	})
+	suite.Require().Nil(err)
+
+	qms := suite.k.GetAllQueueMessage(suite.ctx)
+	suite.Require().Len(qms, 1)
+
+	suite.Require().Equal(qms[0].MarketId, order.MarketId)
+	suite.Require().Equal(qms[0].MessageType, types.MessageTypeCancel)
+	suite.Require().Equal(qms[0].OrderId, order.Id)
+	suite.Require().Equal(qms[0].OrderType, order.OrderType)
+	suite.Require().Equal(qms[0].Owner, order.Owner)
+}
+
+func (suite *IntegrationTestSuite) TestCancelOrder_CancelSell_Success() {
+	suite.k.SetMarket(suite.ctx, market)
+	order := suite.k.NewOrder(suite.ctx, types.Order{
+		MarketId:  getMarketId(),
+		OrderType: types.OrderTypeSell,
+		Amount:    "10200021",
+		Price:     "1000",
+		Owner:     "me",
+	})
+
+	goCtx := sdk.WrapSDKContext(suite.ctx)
+	_, err := suite.msgServer.CancelOrder(goCtx, &types.MsgCancelOrder{
+		Creator:   "me",
+		MarketId:  getMarketId(),
+		OrderId:   order.Id,
+		OrderType: types.OrderTypeSell,
+	})
+	suite.Require().Nil(err)
+
+	qms := suite.k.GetAllQueueMessage(suite.ctx)
+	suite.Require().Len(qms, 1)
+
+	suite.Require().Equal(qms[0].MarketId, order.MarketId)
+	suite.Require().Equal(qms[0].MessageType, types.MessageTypeCancel)
+	suite.Require().Equal(qms[0].OrderId, order.Id)
+	suite.Require().Equal(qms[0].OrderType, order.OrderType)
+	suite.Require().Equal(qms[0].Owner, order.Owner)
+}
+
+func (suite *IntegrationTestSuite) TestCreateMarket_InvalidDenom() {
+	goCtx := sdk.WrapSDKContext(suite.ctx)
+	//empty base denom
+	_, err := suite.msgServer.CreateMarket(goCtx, &types.MsgCreateMarket{
+		Creator: "me",
+		Base:    "",
+		Quote:   denomBze,
+	})
+	suite.Require().NotNil(err)
+
+	//empty quote denom
+	_, err = suite.msgServer.CreateMarket(goCtx, &types.MsgCreateMarket{
+		Creator: "me",
+		Base:    denomBze,
+		Quote:   "",
+	})
+	suite.Require().NotNil(err)
+
+	//same denom for both
+	_, err = suite.msgServer.CreateMarket(goCtx, &types.MsgCreateMarket{
+		Creator: "me",
+		Base:    denomBze,
+		Quote:   denomBze,
+	})
+	suite.Require().NotNil(err)
+
+	//denom has no supply
+	_, err = suite.msgServer.CreateMarket(goCtx, &types.MsgCreateMarket{
+		Creator: "me",
+		Base:    denomStake,
+		Quote:   denomBze,
+	})
+	suite.Require().NotNil(err)
+}
+
+func (suite *IntegrationTestSuite) TestCreateMarket_MarketAlreadyExist() {
+	suite.k.SetMarket(suite.ctx, market)
+	goCtx := sdk.WrapSDKContext(suite.ctx)
+	_, err := suite.msgServer.CreateMarket(goCtx, &types.MsgCreateMarket{
+		Creator: "me",
+		Base:    denomStake,
+		Quote:   denomBze,
+	})
+	suite.Require().NotNil(err)
+
+	_, err = suite.msgServer.CreateMarket(goCtx, &types.MsgCreateMarket{
+		Creator: "me",
+		Base:    denomBze,
+		Quote:   denomStake,
+	})
+	suite.Require().NotNil(err)
+}
+
+func (suite *IntegrationTestSuite) TestCreateMarket_NotEnoughCoinsForFee() {
+	goCtx := sdk.WrapSDKContext(suite.ctx)
+	addr1 := sdk.AccAddress("addr1_______________")
+
+	suite.bankMock.EXPECT().HasSupply(gomock.Any(), denomStake).Return(true).Times(1)
+	suite.bankMock.EXPECT().HasSupply(gomock.Any(), denomBze).Return(true).Times(1)
+	//expect market fee to be paid
+	suite.distrMock.EXPECT().
+		FundCommunityPool(gomock.Any(), sdk.NewCoins(sdk.NewCoin(denomBze, sdk.NewInt(25000000000))), addr1).
+		Times(1).
+		Return(fmt.Errorf("not enough balance"))
+
+	_, err := suite.msgServer.CreateMarket(goCtx, &types.MsgCreateMarket{
+		Creator: addr1.String(),
+		Base:    denomStake,
+		Quote:   denomBze,
+	})
+	suite.Require().NotNil(err)
+}
+
+func (suite *IntegrationTestSuite) TestCreateMarket_Success() {
+	goCtx := sdk.WrapSDKContext(suite.ctx)
+	addr1 := sdk.AccAddress("addr1_______________")
+
+	suite.bankMock.EXPECT().HasSupply(gomock.Any(), denomStake).Return(true).Times(1)
+	suite.bankMock.EXPECT().HasSupply(gomock.Any(), denomBze).Return(true).Times(1)
+	//expect market fee to be paid
+	suite.distrMock.EXPECT().
+		FundCommunityPool(gomock.Any(), sdk.NewCoins(sdk.NewCoin(denomBze, sdk.NewInt(25000000000))), addr1).
+		Times(1).
+		Return(nil)
+
+	newMarket := types.Market{
+		Creator: addr1.String(),
+		Base:    denomStake,
+		Quote:   denomBze,
+	}
+	_, err := suite.msgServer.CreateMarket(goCtx, &types.MsgCreateMarket{
+		Creator: addr1.String(),
+		Base:    denomStake,
+		Quote:   denomBze,
+	})
+
+	suite.Require().Nil(err)
+	storageMarket, ok := suite.k.GetMarket(suite.ctx, newMarket.Base, newMarket.Quote)
+	suite.Require().True(ok)
+	suite.Require().Equal(newMarket, storageMarket)
+}
 
 func (suite *IntegrationTestSuite) TestCreateOrder_InvalidAmount() {
 	goCtx := sdk.WrapSDKContext(suite.ctx)
@@ -52,8 +255,6 @@ func (suite *IntegrationTestSuite) TestCreateOrder_InvalidOrderType() {
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 
 	addr1 := sdk.AccAddress("addr1_______________")
-	acc1 := suite.app.AccountKeeper.NewAccountWithAddress(suite.ctx, addr1)
-	suite.app.AccountKeeper.SetAccount(suite.ctx, acc1)
 	_, err := suite.msgServer.CreateOrder(goCtx, &types.MsgCreateOrder{
 		Amount:    "1000000",
 		Price:     "1",
@@ -85,15 +286,15 @@ func (suite *IntegrationTestSuite) TestCreateOrder_MarketMaker_Buy_Success_ZeroD
 	suite.k.SetMarket(suite.ctx, market)
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 	addr1 := sdk.AccAddress("addr1_______________")
-	acc1 := suite.app.AccountKeeper.NewAccountWithAddress(suite.ctx, addr1)
-	suite.app.AccountKeeper.SetAccount(suite.ctx, acc1)
+	//fee should be captured
+	params := suite.k.GetParams(suite.ctx)
+	makerFee, err := sdk.ParseCoinsNormalized(params.MarketMakerFee)
+	suite.Require().NoError(err)
+	paidCoins := sdk.NewCoins(sdk.NewCoin(denomBze, sdk.NewInt(2_000_000)))
 
-	//initial balances need to be 0
-	initialUserBalances := suite.app.BankKeeper.GetAllBalances(suite.ctx, addr1)
-	suite.Require().True(initialUserBalances.IsZero())
+	suite.bankMock.EXPECT().SendCoinsFromAccountToModule(gomock.Any(), addr1, params.MakerFeeDestination, makerFee).Return(nil).Times(1)
+	suite.bankMock.EXPECT().SendCoinsFromAccountToModule(gomock.Any(), addr1, types.ModuleName, paidCoins).Return(nil).Times(1)
 
-	balances := sdk.NewCoins(newStakeCoin(10000), newBzeCoin(20000000000))
-	suite.Require().NoError(simapp.FundAccount(suite.app.BankKeeper, suite.ctx, addr1, balances))
 	orderMsg := types.MsgCreateOrder{
 		Amount:    "1000000",
 		Price:     "2",
@@ -101,9 +302,9 @@ func (suite *IntegrationTestSuite) TestCreateOrder_MarketMaker_Buy_Success_ZeroD
 		OrderType: types.OrderTypeBuy,
 		Creator:   addr1.String(),
 	}
-	_, err := suite.msgServer.CreateOrder(goCtx, &orderMsg)
-
+	_, err = suite.msgServer.CreateOrder(goCtx, &orderMsg)
 	suite.Require().Nil(err)
+
 	qmList := suite.k.GetAllQueueMessage(suite.ctx)
 	suite.Require().Len(qmList, 1)
 	suite.Require().Equal(qmList[0].MarketId, getMarketId())
@@ -112,18 +313,6 @@ func (suite *IntegrationTestSuite) TestCreateOrder_MarketMaker_Buy_Success_ZeroD
 	suite.Require().Equal(qmList[0].MessageType, orderMsg.OrderType)
 	suite.Require().Equal(qmList[0].Price, orderMsg.Price)
 	suite.Require().Equal(qmList[0].Owner, orderMsg.Creator)
-
-	params := suite.k.GetParams(suite.ctx)
-	fee, err := sdk.ParseCoinNormalized(params.MarketMakerFee)
-	suite.Require().Nil(err)
-	userNewBal := suite.app.BankKeeper.GetAllBalances(suite.ctx, addr1)
-
-	suite.Require().Equal(userNewBal.AmountOf(fee.Denom), balances.AmountOf(fee.Denom).Sub(fee.Amount).SubRaw(2000000))
-
-	feeDestinationModule := suite.app.AccountKeeper.GetModuleAddress(params.MakerFeeDestination)
-	moduleBalance := suite.app.BankKeeper.GetAllBalances(suite.ctx, feeDestinationModule)
-	suite.Require().False(moduleBalance.IsZero())
-	suite.Require().Equal(moduleBalance.AmountOf(fee.Denom), fee.Amount)
 
 	_, ok := suite.k.GetUserDust(suite.ctx, addr1.String(), market.Quote)
 	suite.Require().False(ok)
@@ -143,15 +332,15 @@ func (suite *IntegrationTestSuite) TestCreateOrder_MarketTaker_Buy_Success_ZeroD
 
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 	addr1 := sdk.AccAddress("addr1_______________")
-	acc1 := suite.app.AccountKeeper.NewAccountWithAddress(suite.ctx, addr1)
-	suite.app.AccountKeeper.SetAccount(suite.ctx, acc1)
+	//fee should be captured
+	params := suite.k.GetParams(suite.ctx)
+	takerFee, err := sdk.ParseCoinsNormalized(params.MarketTakerFee)
+	suite.Require().NoError(err)
+	paidCoins := sdk.NewCoins(sdk.NewCoin(denomBze, sdk.NewInt(2_000_000)))
 
-	//initial balances need to be 0
-	initialUserBalances := suite.app.BankKeeper.GetAllBalances(suite.ctx, addr1)
-	suite.Require().True(initialUserBalances.IsZero())
+	suite.bankMock.EXPECT().SendCoinsFromAccountToModule(gomock.Any(), addr1, params.TakerFeeDestination, takerFee).Return(nil).Times(1)
+	suite.bankMock.EXPECT().SendCoinsFromAccountToModule(gomock.Any(), addr1, types.ModuleName, paidCoins).Return(nil).Times(1)
 
-	balances := sdk.NewCoins(newStakeCoin(10000), newBzeCoin(20000000000))
-	suite.Require().NoError(simapp.FundAccount(suite.app.BankKeeper, suite.ctx, addr1, balances))
 	orderMsg := types.MsgCreateOrder{
 		Amount:    "1000000",
 		Price:     "2",
@@ -159,7 +348,7 @@ func (suite *IntegrationTestSuite) TestCreateOrder_MarketTaker_Buy_Success_ZeroD
 		OrderType: types.OrderTypeBuy,
 		Creator:   addr1.String(),
 	}
-	_, err := suite.msgServer.CreateOrder(goCtx, &orderMsg)
+	_, err = suite.msgServer.CreateOrder(goCtx, &orderMsg)
 
 	suite.Require().Nil(err)
 	qmList := suite.k.GetAllQueueMessage(suite.ctx)
@@ -170,18 +359,6 @@ func (suite *IntegrationTestSuite) TestCreateOrder_MarketTaker_Buy_Success_ZeroD
 	suite.Require().Equal(qmList[0].MessageType, orderMsg.OrderType)
 	suite.Require().Equal(qmList[0].Price, orderMsg.Price)
 	suite.Require().Equal(qmList[0].Owner, orderMsg.Creator)
-
-	params := suite.k.GetParams(suite.ctx)
-	fee, err := sdk.ParseCoinNormalized(params.MarketTakerFee)
-	suite.Require().Nil(err)
-	userNewBal := suite.app.BankKeeper.GetAllBalances(suite.ctx, addr1)
-
-	suite.Require().Equal(userNewBal.AmountOf(fee.Denom), balances.AmountOf(fee.Denom).Sub(fee.Amount).SubRaw(2000000))
-
-	feeDestinationModule := suite.app.AccountKeeper.GetModuleAddress(params.TakerFeeDestination)
-	moduleBalance := suite.app.BankKeeper.GetAllBalances(suite.ctx, feeDestinationModule)
-	suite.Require().False(moduleBalance.IsZero())
-	suite.Require().Equal(moduleBalance.AmountOf(fee.Denom), fee.Amount)
 
 	_, ok := suite.k.GetUserDust(suite.ctx, addr1.String(), market.Quote)
 	suite.Require().False(ok)
@@ -201,15 +378,14 @@ func (suite *IntegrationTestSuite) TestCreateOrder_MarketTaker_Buy_Success_WithD
 
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 	addr1 := sdk.AccAddress("addr1_______________")
-	acc1 := suite.app.AccountKeeper.NewAccountWithAddress(suite.ctx, addr1)
-	suite.app.AccountKeeper.SetAccount(suite.ctx, acc1)
+	//fee should be captured
+	params := suite.k.GetParams(suite.ctx)
+	takerFee, err := sdk.ParseCoinsNormalized(params.MarketTakerFee)
+	suite.Require().NoError(err)
+	paidCoins := sdk.NewCoins(sdk.NewCoin(denomBze, sdk.NewInt(3)))
 
-	//initial balances need to be 0
-	initialUserBalances := suite.app.BankKeeper.GetAllBalances(suite.ctx, addr1)
-	suite.Require().True(initialUserBalances.IsZero())
-
-	balances := sdk.NewCoins(newStakeCoin(10000), newBzeCoin(20000000000))
-	suite.Require().NoError(simapp.FundAccount(suite.app.BankKeeper, suite.ctx, addr1, balances))
+	suite.bankMock.EXPECT().SendCoinsFromAccountToModule(gomock.Any(), addr1, params.TakerFeeDestination, takerFee).Return(nil).Times(1)
+	suite.bankMock.EXPECT().SendCoinsFromAccountToModule(gomock.Any(), addr1, types.ModuleName, paidCoins).Return(nil).Times(1)
 	orderMsg := types.MsgCreateOrder{
 		Amount:    "87",
 		Price:     "0.02331",
@@ -217,8 +393,7 @@ func (suite *IntegrationTestSuite) TestCreateOrder_MarketTaker_Buy_Success_WithD
 		OrderType: types.OrderTypeBuy,
 		Creator:   addr1.String(),
 	}
-	_, err := suite.msgServer.CreateOrder(goCtx, &orderMsg)
-
+	_, err = suite.msgServer.CreateOrder(goCtx, &orderMsg)
 	suite.Require().Nil(err)
 	qmList := suite.k.GetAllQueueMessage(suite.ctx)
 	suite.Require().Len(qmList, 1)
@@ -228,18 +403,6 @@ func (suite *IntegrationTestSuite) TestCreateOrder_MarketTaker_Buy_Success_WithD
 	suite.Require().Equal(qmList[0].MessageType, orderMsg.OrderType)
 	suite.Require().Equal(qmList[0].Price, orderMsg.Price)
 	suite.Require().Equal(qmList[0].Owner, orderMsg.Creator)
-
-	params := suite.k.GetParams(suite.ctx)
-	fee, err := sdk.ParseCoinNormalized(params.MarketTakerFee)
-	suite.Require().Nil(err)
-	userNewBal := suite.app.BankKeeper.GetAllBalances(suite.ctx, addr1)
-
-	suite.Require().Equal(userNewBal.AmountOf(fee.Denom), balances.AmountOf(fee.Denom).Sub(fee.Amount).SubRaw(3))
-
-	feeDestinationModule := suite.app.AccountKeeper.GetModuleAddress(params.TakerFeeDestination)
-	moduleBalance := suite.app.BankKeeper.GetAllBalances(suite.ctx, feeDestinationModule)
-	suite.Require().False(moduleBalance.IsZero())
-	suite.Require().Equal(moduleBalance.AmountOf(fee.Denom), fee.Amount)
 
 	udQuote, ok := suite.k.GetUserDust(suite.ctx, addr1.String(), market.Quote)
 	suite.Require().True(ok)
@@ -255,15 +418,15 @@ func (suite *IntegrationTestSuite) TestCreateOrder_MarketMaker_Sell_Success() {
 	suite.k.SetMarket(suite.ctx, market)
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 	addr1 := sdk.AccAddress("addr1_______________")
-	acc1 := suite.app.AccountKeeper.NewAccountWithAddress(suite.ctx, addr1)
-	suite.app.AccountKeeper.SetAccount(suite.ctx, acc1)
 
-	//initial balances need to be 0
-	initialUserBalances := suite.app.BankKeeper.GetAllBalances(suite.ctx, addr1)
-	suite.Require().True(initialUserBalances.IsZero())
+	//fee should be captured
+	params := suite.k.GetParams(suite.ctx)
+	takerFee, err := sdk.ParseCoinsNormalized(params.MarketMakerFee)
+	suite.Require().NoError(err)
+	paidCoins := sdk.NewCoins(sdk.NewCoin(denomStake, sdk.NewInt(1000000)))
 
-	balances := sdk.NewCoins(newStakeCoin(10000000), newBzeCoin(20000000000))
-	suite.Require().NoError(simapp.FundAccount(suite.app.BankKeeper, suite.ctx, addr1, balances))
+	suite.bankMock.EXPECT().SendCoinsFromAccountToModule(gomock.Any(), addr1, params.MakerFeeDestination, takerFee).Return(nil).Times(1)
+	suite.bankMock.EXPECT().SendCoinsFromAccountToModule(gomock.Any(), addr1, types.ModuleName, paidCoins).Return(nil).Times(1)
 	orderMsg := types.MsgCreateOrder{
 		Amount:    "1000000",
 		Price:     "1",
@@ -271,7 +434,7 @@ func (suite *IntegrationTestSuite) TestCreateOrder_MarketMaker_Sell_Success() {
 		OrderType: types.OrderTypeSell,
 		Creator:   addr1.String(),
 	}
-	_, err := suite.msgServer.CreateOrder(goCtx, &orderMsg)
+	_, err = suite.msgServer.CreateOrder(goCtx, &orderMsg)
 
 	suite.Require().Nil(err)
 	qmList := suite.k.GetAllQueueMessage(suite.ctx)
@@ -282,19 +445,6 @@ func (suite *IntegrationTestSuite) TestCreateOrder_MarketMaker_Sell_Success() {
 	suite.Require().Equal(qmList[0].MessageType, orderMsg.OrderType)
 	suite.Require().Equal(qmList[0].Price, orderMsg.Price)
 	suite.Require().Equal(qmList[0].Owner, orderMsg.Creator)
-
-	params := suite.k.GetParams(suite.ctx)
-	fee, err := sdk.ParseCoinNormalized(params.MarketMakerFee)
-	suite.Require().Nil(err)
-	userNewBal := suite.app.BankKeeper.GetAllBalances(suite.ctx, addr1)
-
-	suite.Require().Equal(userNewBal.AmountOf(fee.Denom), balances.AmountOf(fee.Denom).Sub(fee.Amount))
-	suite.Require().Equal(userNewBal.AmountOf(market.Base), balances.AmountOf(market.Base).SubRaw(1000000))
-
-	feeDestinationModule := suite.app.AccountKeeper.GetModuleAddress(params.MakerFeeDestination)
-	moduleBalance := suite.app.BankKeeper.GetAllBalances(suite.ctx, feeDestinationModule)
-	suite.Require().False(moduleBalance.IsZero())
-	suite.Require().Equal(moduleBalance.AmountOf(fee.Denom), fee.Amount)
 
 	//should never have dust on sell orders
 	_, ok := suite.k.GetUserDust(suite.ctx, addr1.String(), market.Quote)
@@ -315,15 +465,15 @@ func (suite *IntegrationTestSuite) TestCreateOrder_MarketTaker_Sell_Success() {
 
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 	addr1 := sdk.AccAddress("addr1_______________")
-	acc1 := suite.app.AccountKeeper.NewAccountWithAddress(suite.ctx, addr1)
-	suite.app.AccountKeeper.SetAccount(suite.ctx, acc1)
 
-	//initial balances need to be 0
-	initialUserBalances := suite.app.BankKeeper.GetAllBalances(suite.ctx, addr1)
-	suite.Require().True(initialUserBalances.IsZero())
+	//fee should be captured
+	params := suite.k.GetParams(suite.ctx)
+	takerFee, err := sdk.ParseCoinsNormalized(params.MarketTakerFee)
+	suite.Require().NoError(err)
+	paidCoins := sdk.NewCoins(sdk.NewCoin(denomStake, sdk.NewInt(1000000)))
 
-	balances := sdk.NewCoins(newStakeCoin(10000000), newBzeCoin(20000000000))
-	suite.Require().NoError(simapp.FundAccount(suite.app.BankKeeper, suite.ctx, addr1, balances))
+	suite.bankMock.EXPECT().SendCoinsFromAccountToModule(gomock.Any(), addr1, params.TakerFeeDestination, takerFee).Return(nil).Times(1)
+	suite.bankMock.EXPECT().SendCoinsFromAccountToModule(gomock.Any(), addr1, types.ModuleName, paidCoins).Return(nil).Times(1)
 	orderMsg := types.MsgCreateOrder{
 		Amount:    "1000000",
 		Price:     "1",
@@ -331,8 +481,7 @@ func (suite *IntegrationTestSuite) TestCreateOrder_MarketTaker_Sell_Success() {
 		OrderType: types.OrderTypeSell,
 		Creator:   addr1.String(),
 	}
-	_, err := suite.msgServer.CreateOrder(goCtx, &orderMsg)
-
+	_, err = suite.msgServer.CreateOrder(goCtx, &orderMsg)
 	suite.Require().Nil(err)
 	qmList := suite.k.GetAllQueueMessage(suite.ctx)
 	suite.Require().Len(qmList, 1)
@@ -343,19 +492,7 @@ func (suite *IntegrationTestSuite) TestCreateOrder_MarketTaker_Sell_Success() {
 	suite.Require().Equal(qmList[0].Price, orderMsg.Price)
 	suite.Require().Equal(qmList[0].Owner, orderMsg.Creator)
 
-	params := suite.k.GetParams(suite.ctx)
-	fee, err := sdk.ParseCoinNormalized(params.MarketTakerFee)
-	suite.Require().Nil(err)
-	userNewBal := suite.app.BankKeeper.GetAllBalances(suite.ctx, addr1)
-
-	suite.Require().Equal(userNewBal.AmountOf(fee.Denom), balances.AmountOf(fee.Denom).Sub(fee.Amount))
-	suite.Require().Equal(userNewBal.AmountOf(market.Base), balances.AmountOf(market.Base).SubRaw(1000000))
-
 	//TODO: better testing in case fee destination is changed to community pool
-	feeDestinationModule := suite.app.AccountKeeper.GetModuleAddress(params.TakerFeeDestination)
-	moduleBalance := suite.app.BankKeeper.GetAllBalances(suite.ctx, feeDestinationModule)
-	suite.Require().False(moduleBalance.IsZero())
-	suite.Require().Equal(moduleBalance.AmountOf(fee.Denom), fee.Amount)
 
 	//should never have dust on sell orders
 	_, ok := suite.k.GetUserDust(suite.ctx, addr1.String(), market.Quote)
@@ -367,7 +504,7 @@ func (suite *IntegrationTestSuite) TestCreateOrder_MarketTaker_Sell_Success() {
 
 func (suite *IntegrationTestSuite) TestCreateOrder_MarketTaker_StressBalance() {
 	suite.k.SetMarket(suite.ctx, market)
-	engine, err := keeper.NewProcessingEngine(suite.app.TradebinKeeper, suite.app.BankKeeper, suite.app.TradebinKeeper.Logger(suite.ctx))
+	engine, err := keeper.NewProcessingEngine(suite.k, suite.bankMock, suite.k.Logger(suite.ctx))
 	suite.Require().Nil(err)
 
 	//create initial random markets
@@ -405,35 +542,37 @@ func (suite *IntegrationTestSuite) TestCreateOrder_MarketTaker_StressBalance() {
 	suite.k.SetMarket(suite.ctx, market3)
 	suite.k.SetMarket(suite.ctx, market4)
 
-	//set initial balances to 10 random accounts
-	balances := sdk.NewCoins(
-		newStakeCoin(999999999999999),
-		newBzeCoin(999999999999999),
-		sdk.NewInt64Coin(testDenom1, 999999999999999),
-		sdk.NewInt64Coin(testDenom2, 999999999999999),
-	)
 	var creators []string
 	for i := 0; i < 10; i++ {
 		addr1 := sdk.AccAddress(fmt.Sprintf("addr%d_______________", i))
-		acc1 := suite.app.AccountKeeper.NewAccountWithAddress(suite.ctx, addr1)
-		suite.app.AccountKeeper.SetAccount(suite.ctx, acc1)
-		suite.Require().NoError(simapp.FundAccount(suite.app.BankKeeper, suite.ctx, addr1, balances))
 		creators = append(creators, addr1.String())
 	}
 
+	allPaid := sdk.NewCoins()
 	for i := 0; i < 5; i++ {
-		suite.randomOrderCreateMessages(suite.randomNumber(1000), creators, market)
-		suite.randomOrderCreateMessages(suite.randomNumber(1000), creators, market1)
-		suite.randomOrderCreateMessages(suite.randomNumber(1000), creators, market2)
-		suite.randomOrderCreateMessages(suite.randomNumber(1000), creators, market3)
-		suite.randomOrderCreateMessages(suite.randomNumber(1000), creators, market4)
+		_, paid := suite.randomOrderCreateMessages(suite.randomNumber(1000), creators, market)
+		allPaid = allPaid.Add(paid...)
+		_, paid = suite.randomOrderCreateMessages(suite.randomNumber(1000), creators, market1)
+		allPaid = allPaid.Add(paid...)
+		_, paid = suite.randomOrderCreateMessages(suite.randomNumber(1000), creators, market2)
+		allPaid = allPaid.Add(paid...)
+		_, paid = suite.randomOrderCreateMessages(suite.randomNumber(1000), creators, market3)
+		allPaid = allPaid.Add(paid...)
+		_, paid = suite.randomOrderCreateMessages(suite.randomNumber(1000), creators, market4)
+		allPaid = allPaid.Add(paid...)
 
+		suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, gomock.Any(), gomock.Any()).
+			DoAndReturn(func(ctx sdk.Context, moduleName string, recipient sdk.AccAddress, coins sdk.Coins) error {
+				allPaid = allPaid.Sub(coins...)
+				return nil
+			}).AnyTimes()
+		//suite.bankMock.EXPECT().SendCoinsFromAccountToModule(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 		engine.ProcessQueueMessages(suite.ctx)
 	}
 
 	allOrders := suite.k.GetAllOrder(suite.ctx)
 	suite.Require().NotEmpty(allOrders)
-	amounts := sdk.NewCoins(sdk.NewCoin(market.Base, sdk.ZeroInt()), sdk.NewCoin(market.Quote, sdk.ZeroInt()))
+	amounts := sdk.NewCoins()
 	//check module balance is equal to the coins found
 	foundOrderTypesByPrice := make(map[string]string)
 	aggregatedOrders := make(map[string]types.AggregatedOrder)
@@ -478,9 +617,7 @@ func (suite *IntegrationTestSuite) TestCreateOrder_MarketTaker_StressBalance() {
 		suite.Require().Equal(foundAgg.Amount, agg.Amount)
 	}
 
-	moduleAddr := suite.app.AccountKeeper.GetModuleAddress(types.ModuleName)
-	moduleBalance := suite.app.BankKeeper.GetAllBalances(suite.ctx, moduleAddr)
-	suite.Require().Equal(moduleBalance, amounts)
+	suite.Require().Equal(allPaid, amounts)
 }
 
 func (suite *IntegrationTestSuite) TestCreateOrder_MarketTaker_CheckPrice_Fail() {
@@ -500,15 +637,6 @@ func (suite *IntegrationTestSuite) TestCreateOrder_MarketTaker_CheckPrice_Fail()
 
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 	addr1 := sdk.AccAddress("addr1_______________")
-	acc1 := suite.app.AccountKeeper.NewAccountWithAddress(suite.ctx, addr1)
-	suite.app.AccountKeeper.SetAccount(suite.ctx, acc1)
-
-	//initial balances need to be 0
-	initialUserBalances := suite.app.BankKeeper.GetAllBalances(suite.ctx, addr1)
-	suite.Require().True(initialUserBalances.IsZero())
-
-	balances := sdk.NewCoins(newStakeCoin(10000000), newBzeCoin(20000000000))
-	suite.Require().NoError(simapp.FundAccount(suite.app.BankKeeper, suite.ctx, addr1, balances))
 
 	//check price error on sell order
 	orderMsg := types.MsgCreateOrder{
@@ -519,7 +647,6 @@ func (suite *IntegrationTestSuite) TestCreateOrder_MarketTaker_CheckPrice_Fail()
 		Creator:   addr1.String(),
 	}
 	_, err := suite.msgServer.CreateOrder(goCtx, &orderMsg)
-
 	suite.Require().Error(err)
 	qmList := suite.k.GetAllQueueMessage(suite.ctx)
 	suite.Require().Len(qmList, 0)
@@ -538,6 +665,14 @@ func (suite *IntegrationTestSuite) TestCreateOrder_MarketTaker_CheckPrice_Fail()
 	qmList = suite.k.GetAllQueueMessage(suite.ctx)
 	suite.Require().Len(qmList, 0)
 
+	//fee should be captured
+	params := suite.k.GetParams(suite.ctx)
+	makerFee, err := sdk.ParseCoinsNormalized(params.MarketMakerFee)
+	suite.Require().NoError(err)
+
+	paidCoins := sdk.NewCoins(sdk.NewCoin(denomBze, sdk.NewInt(4000000)))
+	suite.bankMock.EXPECT().SendCoinsFromAccountToModule(gomock.Any(), addr1, params.MakerFeeDestination, makerFee).Return(nil).Times(1)
+	suite.bankMock.EXPECT().SendCoinsFromAccountToModule(gomock.Any(), addr1, types.ModuleName, paidCoins).Return(nil).Times(1)
 	//add 2 new orders in order to check message queue price validator
 	orderMsg = types.MsgCreateOrder{
 		Amount:    "1000000",
@@ -549,6 +684,9 @@ func (suite *IntegrationTestSuite) TestCreateOrder_MarketTaker_CheckPrice_Fail()
 	_, err = suite.msgServer.CreateOrder(goCtx, &orderMsg)
 	suite.Require().NoError(err)
 
+	paidCoins = sdk.NewCoins(sdk.NewCoin(denomStake, sdk.NewInt(1000000)))
+	suite.bankMock.EXPECT().SendCoinsFromAccountToModule(gomock.Any(), addr1, params.MakerFeeDestination, makerFee).Return(nil).Times(1)
+	suite.bankMock.EXPECT().SendCoinsFromAccountToModule(gomock.Any(), addr1, types.ModuleName, paidCoins).Return(nil).Times(1)
 	orderMsg = types.MsgCreateOrder{
 		Amount:    "1000000",
 		Price:     "4.5",
@@ -580,10 +718,11 @@ func (suite *IntegrationTestSuite) TestCreateOrder_MarketTaker_CheckPrice_Fail()
 	suite.Require().Error(err)
 }
 
-func (suite *IntegrationTestSuite) randomOrderCreateMessages(count int, creators []string, market types.Market) []types.MsgCreateOrder {
+func (suite *IntegrationTestSuite) randomOrderCreateMessages(count int, creators []string, market types.Market) ([]types.MsgCreateOrder, sdk.Coins) {
 	var msgs []types.MsgCreateOrder
 	orderTypes := []string{types.OrderTypeBuy, types.OrderTypeSell}
 	goCtx := sdk.WrapSDKContext(suite.ctx)
+	allPaid := sdk.NewCoins()
 	const ExecPrice = 15
 	for i := 0; i < count; i++ {
 		randomOrderType := orderTypes[i%2]
@@ -595,19 +734,39 @@ func (suite *IntegrationTestSuite) randomOrderCreateMessages(count int, creators
 		}
 		randomPriceStr := strconv.Itoa(randomPrice)
 		minAmount := keeper.CalculateMinAmount(randomPriceStr)
+		orderAmount := minAmount.AddRaw(int64(suite.randomNumber(1000)))
 		orderMsg := types.MsgCreateOrder{
-			Amount:    minAmount.AddRaw(int64(suite.randomNumber(1000))).String(),
+			Amount:    orderAmount.String(),
 			Price:     randomPriceStr,
 			MarketId:  types.CreateMarketId(market.Base, market.Quote),
 			OrderType: randomOrderType,
 			Creator:   creators[suite.randomNumber(len(creators))],
 		}
 
-		_, err := suite.msgServer.CreateOrder(goCtx, &orderMsg)
+		//fee should be captured
+		params := suite.k.GetParams(suite.ctx)
+		takerFee, err := sdk.ParseCoinsNormalized(params.MarketTakerFee)
+		suite.Require().NoError(err)
+		makerFee, err := sdk.ParseCoinsNormalized(params.MarketMakerFee)
+		suite.Require().NoError(err)
+		var paidCoins sdk.Coins
+		if orderMsg.OrderType == types.OrderTypeBuy {
+			paidCoins = sdk.NewCoins(sdk.NewCoin(market.Quote, orderAmount.MulRaw(int64(randomPrice))))
+		} else {
+			paidCoins = sdk.NewCoins(sdk.NewCoin(market.Base, orderAmount))
+		}
+		allPaid = allPaid.Add(paidCoins...)
+
+		creatorAcc, err := sdk.AccAddressFromBech32(orderMsg.Creator)
+		suite.Require().NoError(err)
+		suite.bankMock.EXPECT().SendCoinsFromAccountToModule(gomock.Any(), creatorAcc, gomock.AnyOf(params.TakerFeeDestination, params.MakerFeeDestination), gomock.AnyOf(takerFee, makerFee)).Return(nil).Times(1)
+		suite.bankMock.EXPECT().SendCoinsFromAccountToModule(gomock.Any(), creatorAcc, types.ModuleName, paidCoins).Return(nil).Times(1)
+
+		_, err = suite.msgServer.CreateOrder(goCtx, &orderMsg)
 		suite.Require().NoError(err)
 	}
 
-	return msgs
+	return msgs, allPaid
 }
 
 func (suite *IntegrationTestSuite) randomNumber(to int) int {
@@ -626,23 +785,10 @@ func (suite *IntegrationTestSuite) msgOrderFillSetup(orderType string) (allPrice
 
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 	addr1 = sdk.AccAddress("addr1_______________")
-	acc1 := suite.app.AccountKeeper.NewAccountWithAddress(suite.ctx, addr1)
-	suite.app.AccountKeeper.SetAccount(suite.ctx, acc1)
-
 	addr2 = sdk.AccAddress("addr2_______________")
-	acc2 := suite.app.AccountKeeper.NewAccountWithAddress(suite.ctx, addr2)
-	suite.app.AccountKeeper.SetAccount(suite.ctx, acc2)
-
-	//initial balances need to be 0
-	user1Balances := suite.app.BankKeeper.GetAllBalances(suite.ctx, addr1)
-	suite.Require().True(user1Balances.IsZero())
-
-	user2Balances := suite.app.BankKeeper.GetAllBalances(suite.ctx, addr2)
-	suite.Require().True(user2Balances.IsZero())
-
-	balances := sdk.NewCoins(newStakeCoin(10000000), newBzeCoin(20000000000))
-	suite.Require().NoError(simapp.FundAccount(suite.app.BankKeeper, suite.ctx, addr1, balances))
-	suite.Require().NoError(simapp.FundAccount(suite.app.BankKeeper, suite.ctx, addr2, balances))
+	params := suite.k.GetParams(suite.ctx)
+	makerFee, err := sdk.ParseCoinsNormalized(params.MarketMakerFee)
+	suite.Require().NoError(err)
 
 	initialPrice := sdk.ZeroInt()
 	staticAmount := "1000000"
@@ -656,6 +802,15 @@ func (suite *IntegrationTestSuite) msgOrderFillSetup(orderType string) (allPrice
 			Creator:   addr1.String(),
 		}
 
+		var paidCoins sdk.Coins
+		if orderType == types.OrderTypeBuy {
+			paidCoins = sdk.NewCoins(sdk.NewCoin(market.Quote, sdk.NewInt(1000000).Mul(initialPrice)))
+		} else {
+			paidCoins = sdk.NewCoins(sdk.NewCoin(market.Base, sdk.NewInt(1000000)))
+		}
+
+		suite.bankMock.EXPECT().SendCoinsFromAccountToModule(gomock.Any(), addr1, params.MakerFeeDestination, makerFee).Return(nil).Times(1)
+		suite.bankMock.EXPECT().SendCoinsFromAccountToModule(gomock.Any(), addr1, types.ModuleName, paidCoins).Return(nil).Times(1)
 		_, err := suite.msgServer.CreateOrder(goCtx, &orderMsg)
 		suite.Require().NoError(err)
 
@@ -666,13 +821,17 @@ func (suite *IntegrationTestSuite) msgOrderFillSetup(orderType string) (allPrice
 }
 
 func (suite *IntegrationTestSuite) TestMsgOrderFill_OneOrderPartialFill_Sell() {
-	_, _, addr2 := suite.msgOrderFillSetup(types.OrderTypeSell)
+	_, addr1, addr2 := suite.msgOrderFillSetup(types.OrderTypeSell)
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 
-	engine, err := keeper.NewProcessingEngine(suite.app.TradebinKeeper, suite.app.BankKeeper, suite.app.TradebinKeeper.Logger(suite.ctx))
+	engine, err := keeper.NewProcessingEngine(suite.k, suite.bankMock, suite.k.Logger(suite.ctx))
 	suite.Require().Nil(err)
 
 	engine.ProcessQueueMessages(suite.ctx)
+
+	params := suite.k.GetParams(suite.ctx)
+	takerFee, err := sdk.ParseCoinsNormalized(params.MarketTakerFee)
+	suite.Require().NoError(err)
 
 	//Let's fill 1 order with amount lower than the available order
 	fillOrder := types.MsgFillOrders{
@@ -687,6 +846,10 @@ func (suite *IntegrationTestSuite) TestMsgOrderFill_OneOrderPartialFill_Sell() {
 		},
 	}
 
+	paidCoins := sdk.NewCoins(sdk.NewCoin(market.Quote, sdk.NewInt(500000)))
+	suite.bankMock.EXPECT().SendCoinsFromAccountToModule(gomock.Any(), addr2, params.MakerFeeDestination, takerFee).Return(nil).Times(1)
+	suite.bankMock.EXPECT().SendCoinsFromAccountToModule(gomock.Any(), addr2, types.ModuleName, paidCoins).Return(nil).Times(1)
+
 	_, err = suite.msgServer.FillOrders(goCtx, &fillOrder)
 	suite.Require().NoError(err)
 
@@ -700,13 +863,10 @@ func (suite *IntegrationTestSuite) TestMsgOrderFill_OneOrderPartialFill_Sell() {
 	suite.Require().Equal(qmList[0].Price, fillOrder.Orders[0].Price)
 	suite.Require().Equal(qmList[0].Owner, fillOrder.Creator)
 
+	receivedCoins := sdk.NewCoins(sdk.NewCoin(market.Base, sdk.NewInt(500000)))
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, addr2, receivedCoins).Return(nil).Times(1)
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, addr1, paidCoins).Return(nil).Times(1)
 	engine.ProcessQueueMessages(suite.ctx)
-
-	//check that the order was correctly executed and the user received/spent the amounts related to the order
-	user2Balances := suite.app.BankKeeper.GetAllBalances(suite.ctx, addr2)
-	//subtract the market making trading fee
-	suite.Require().EqualValues(20000000000-500000-100000, user2Balances.AmountOf(denomBze).Int64())
-	suite.Require().EqualValues(10000000+500000, user2Balances.AmountOf(denomStake).Int64())
 
 	all := suite.k.GetAllOrder(suite.ctx)
 	suite.Require().NotEmpty(all)
@@ -728,14 +888,16 @@ func (suite *IntegrationTestSuite) TestMsgOrderFill_OneOrderPartialFill_Sell() {
 }
 
 func (suite *IntegrationTestSuite) TestMsgOrderFill_OneOrderPartialFill_Buy() {
-	_, _, addr2 := suite.msgOrderFillSetup(types.OrderTypeBuy)
+	_, addr1, addr2 := suite.msgOrderFillSetup(types.OrderTypeBuy)
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 
-	engine, err := keeper.NewProcessingEngine(suite.app.TradebinKeeper, suite.app.BankKeeper, suite.app.TradebinKeeper.Logger(suite.ctx))
+	engine, err := keeper.NewProcessingEngine(suite.k, suite.bankMock, suite.k.Logger(suite.ctx))
 	suite.Require().Nil(err)
 
 	engine.ProcessQueueMessages(suite.ctx)
-
+	params := suite.k.GetParams(suite.ctx)
+	takerFee, err := sdk.ParseCoinsNormalized(params.MarketTakerFee)
+	suite.Require().NoError(err)
 	//Let's fill 1 order with amount lower than the available order
 	fillOrder := types.MsgFillOrders{
 		Creator:   addr2.String(),
@@ -749,6 +911,9 @@ func (suite *IntegrationTestSuite) TestMsgOrderFill_OneOrderPartialFill_Buy() {
 		},
 	}
 
+	paidCoins := sdk.NewCoins(sdk.NewCoin(market.Base, sdk.NewInt(500000)))
+	suite.bankMock.EXPECT().SendCoinsFromAccountToModule(gomock.Any(), addr2, params.MakerFeeDestination, takerFee).Return(nil).Times(1)
+	suite.bankMock.EXPECT().SendCoinsFromAccountToModule(gomock.Any(), addr2, types.ModuleName, paidCoins).Return(nil).Times(1)
 	_, err = suite.msgServer.FillOrders(goCtx, &fillOrder)
 	suite.Require().NoError(err)
 
@@ -762,13 +927,11 @@ func (suite *IntegrationTestSuite) TestMsgOrderFill_OneOrderPartialFill_Buy() {
 	suite.Require().Equal(qmList[0].Price, fillOrder.Orders[0].Price)
 	suite.Require().Equal(qmList[0].Owner, fillOrder.Creator)
 
-	engine.ProcessQueueMessages(suite.ctx)
+	receivedCoins := sdk.NewCoins(sdk.NewCoin(market.Quote, sdk.NewInt(500000)))
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, addr2, receivedCoins).Return(nil).Times(1)
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, addr1, paidCoins).Return(nil).Times(1)
 
-	//check that the order was correctly executed and the user received/spent the amounts related to the order
-	user2Balances := suite.app.BankKeeper.GetAllBalances(suite.ctx, addr2)
-	//subtract the market making trading fee
-	suite.Require().EqualValues(10000000-500000, user2Balances.AmountOf(denomStake).Int64())
-	suite.Require().EqualValues(20000000000-100000+500000, user2Balances.AmountOf(denomBze).Int64())
+	engine.ProcessQueueMessages(suite.ctx)
 
 	all := suite.k.GetAllOrder(suite.ctx)
 	suite.Require().NotEmpty(all)
@@ -790,13 +953,17 @@ func (suite *IntegrationTestSuite) TestMsgOrderFill_OneOrderPartialFill_Buy() {
 }
 
 func (suite *IntegrationTestSuite) TestMsgOrderFill_OneOrderFullFill_Sell() {
-	_, _, addr2 := suite.msgOrderFillSetup(types.OrderTypeSell)
+	_, addr1, addr2 := suite.msgOrderFillSetup(types.OrderTypeSell)
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 
-	engine, err := keeper.NewProcessingEngine(suite.app.TradebinKeeper, suite.app.BankKeeper, suite.app.TradebinKeeper.Logger(suite.ctx))
+	engine, err := keeper.NewProcessingEngine(suite.k, suite.bankMock, suite.k.Logger(suite.ctx))
 	suite.Require().Nil(err)
 
 	engine.ProcessQueueMessages(suite.ctx)
+
+	params := suite.k.GetParams(suite.ctx)
+	takerFee, err := sdk.ParseCoinsNormalized(params.MarketTakerFee)
+	suite.Require().NoError(err)
 
 	//Let's fill 1 order with amount lower than the available order
 	fillOrder := types.MsgFillOrders{
@@ -811,6 +978,9 @@ func (suite *IntegrationTestSuite) TestMsgOrderFill_OneOrderFullFill_Sell() {
 		},
 	}
 
+	paidCoins := sdk.NewCoins(sdk.NewCoin(market.Quote, sdk.NewInt(1000000)))
+	suite.bankMock.EXPECT().SendCoinsFromAccountToModule(gomock.Any(), addr2, params.TakerFeeDestination, takerFee).Return(nil).Times(1)
+	suite.bankMock.EXPECT().SendCoinsFromAccountToModule(gomock.Any(), addr2, types.ModuleName, paidCoins).Return(nil).Times(1)
 	_, err = suite.msgServer.FillOrders(goCtx, &fillOrder)
 	suite.Require().NoError(err)
 
@@ -824,13 +994,10 @@ func (suite *IntegrationTestSuite) TestMsgOrderFill_OneOrderFullFill_Sell() {
 	suite.Require().Equal(qmList[0].Price, fillOrder.Orders[0].Price)
 	suite.Require().Equal(qmList[0].Owner, fillOrder.Creator)
 
+	receivedCoins := sdk.NewCoins(sdk.NewCoin(market.Base, sdk.NewInt(1000000)))
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, addr2, receivedCoins).Return(nil).Times(1)
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, addr1, paidCoins).Return(nil).Times(1)
 	engine.ProcessQueueMessages(suite.ctx)
-
-	//check that the order was correctly executed and the user received/spent the amounts related to the order
-	user2Balances := suite.app.BankKeeper.GetAllBalances(suite.ctx, addr2)
-	//subtract the market making trading fee
-	suite.Require().EqualValues(20000000000-1000000-100000, user2Balances.AmountOf(denomBze).Int64())
-	suite.Require().EqualValues(10000000+1000000, user2Balances.AmountOf(denomStake).Int64())
 
 	all := suite.k.GetAllOrder(suite.ctx)
 	suite.Require().NotEmpty(all)
@@ -843,13 +1010,15 @@ func (suite *IntegrationTestSuite) TestMsgOrderFill_OneOrderFullFill_Sell() {
 }
 
 func (suite *IntegrationTestSuite) TestMsgOrderFill_OneOrderFullFill_Buy() {
-	_, _, addr2 := suite.msgOrderFillSetup(types.OrderTypeBuy)
+	_, addr1, addr2 := suite.msgOrderFillSetup(types.OrderTypeBuy)
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 
-	engine, err := keeper.NewProcessingEngine(suite.app.TradebinKeeper, suite.app.BankKeeper, suite.app.TradebinKeeper.Logger(suite.ctx))
+	engine, err := keeper.NewProcessingEngine(suite.k, suite.bankMock, suite.k.Logger(suite.ctx))
 	suite.Require().Nil(err)
 
 	engine.ProcessQueueMessages(suite.ctx)
+	params := suite.k.GetParams(suite.ctx)
+	takerFee, err := sdk.ParseCoinsNormalized(params.MarketTakerFee)
 
 	//Let's fill 1 order with amount lower than the available order
 	fillOrder := types.MsgFillOrders{
@@ -864,6 +1033,9 @@ func (suite *IntegrationTestSuite) TestMsgOrderFill_OneOrderFullFill_Buy() {
 		},
 	}
 
+	paidCoins := sdk.NewCoins(sdk.NewCoin(market.Base, sdk.NewInt(1000000)))
+	suite.bankMock.EXPECT().SendCoinsFromAccountToModule(gomock.Any(), addr2, params.MakerFeeDestination, takerFee).Return(nil).Times(1)
+	suite.bankMock.EXPECT().SendCoinsFromAccountToModule(gomock.Any(), addr2, types.ModuleName, paidCoins).Return(nil).Times(1)
 	_, err = suite.msgServer.FillOrders(goCtx, &fillOrder)
 	suite.Require().NoError(err)
 
@@ -877,13 +1049,11 @@ func (suite *IntegrationTestSuite) TestMsgOrderFill_OneOrderFullFill_Buy() {
 	suite.Require().Equal(qmList[0].Price, fillOrder.Orders[0].Price)
 	suite.Require().Equal(qmList[0].Owner, fillOrder.Creator)
 
-	engine.ProcessQueueMessages(suite.ctx)
+	receivedCoins := sdk.NewCoins(sdk.NewCoin(market.Quote, sdk.NewInt(1000000)))
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, addr2, receivedCoins).Return(nil).Times(1)
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, addr1, paidCoins).Return(nil).Times(1)
 
-	//check that the order was correctly executed and the user received/spent the amounts related to the order
-	user2Balances := suite.app.BankKeeper.GetAllBalances(suite.ctx, addr2)
-	//subtract the market making trading fee
-	suite.Require().EqualValues(20000000000+1000000-100000, user2Balances.AmountOf(denomBze).Int64())
-	suite.Require().EqualValues(10000000-1000000, user2Balances.AmountOf(denomStake).Int64())
+	engine.ProcessQueueMessages(suite.ctx)
 
 	all := suite.k.GetAllOrder(suite.ctx)
 	suite.Require().NotEmpty(all)
@@ -896,13 +1066,17 @@ func (suite *IntegrationTestSuite) TestMsgOrderFill_OneOrderFullFill_Buy() {
 }
 
 func (suite *IntegrationTestSuite) TestMsgOrderFill_TwoOrdersOnePartialFill_Sell() {
-	allPrices, _, addr2 := suite.msgOrderFillSetup(types.OrderTypeSell)
+	allPrices, addr1, addr2 := suite.msgOrderFillSetup(types.OrderTypeSell)
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 
-	engine, err := keeper.NewProcessingEngine(suite.app.TradebinKeeper, suite.app.BankKeeper, suite.app.TradebinKeeper.Logger(suite.ctx))
+	engine, err := keeper.NewProcessingEngine(suite.k, suite.bankMock, suite.k.Logger(suite.ctx))
 	suite.Require().Nil(err)
 
 	engine.ProcessQueueMessages(suite.ctx)
+
+	params := suite.k.GetParams(suite.ctx)
+	takerFee, err := sdk.ParseCoinsNormalized(params.MarketTakerFee)
+	suite.Require().NoError(err)
 
 	//Let's fill 1 order with amount lower than the available order
 	fillOrder := types.MsgFillOrders{
@@ -921,11 +1095,12 @@ func (suite *IntegrationTestSuite) TestMsgOrderFill_TwoOrdersOnePartialFill_Sell
 		},
 	}
 
+	paidCoins := sdk.NewCoins(sdk.NewCoin(market.Quote, sdk.NewInt(2500000)))
+	suite.bankMock.EXPECT().SendCoinsFromAccountToModule(gomock.Any(), addr2, params.TakerFeeDestination, takerFee).Return(nil).Times(1)
+	suite.bankMock.EXPECT().SendCoinsFromAccountToModule(gomock.Any(), addr2, types.ModuleName, paidCoins).Return(nil).Times(1)
 	_, err = suite.msgServer.FillOrders(goCtx, &fillOrder)
 	suite.Require().NoError(err)
 
-	agg := suite.k.GetAllAggregatedOrder(suite.ctx)
-	_ = agg
 	//check that the new message is saved accordingly to queue messages storage
 	qmList := suite.k.GetAllQueueMessage(suite.ctx)
 	suite.Require().Len(qmList, 2)
@@ -942,13 +1117,12 @@ func (suite *IntegrationTestSuite) TestMsgOrderFill_TwoOrdersOnePartialFill_Sell
 	suite.Require().Equal(qmList[1].Price, fillOrder.Orders[1].Price)
 	suite.Require().Equal(qmList[1].Owner, fillOrder.Creator)
 
+	//they receive in multiple bank calls: one for each message
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, addr1, sdk.NewCoins(sdk.NewCoin(market.Quote, sdk.NewInt(1000000)))).Return(nil).Times(1)
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, addr1, sdk.NewCoins(sdk.NewCoin(market.Quote, sdk.NewInt(1500000)))).Return(nil).Times(1)
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, addr2, sdk.NewCoins(sdk.NewCoin(market.Base, sdk.NewInt(1000000)))).Return(nil).Times(1)
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, addr2, sdk.NewCoins(sdk.NewCoin(market.Base, sdk.NewInt(500000)))).Return(nil).Times(1)
 	engine.ProcessQueueMessages(suite.ctx)
-
-	//check that the order was correctly executed and the user received/spent the amounts related to the order
-	user2Balances := suite.app.BankKeeper.GetAllBalances(suite.ctx, addr2)
-	//subtract the market making trading fee + the coins spent on the order
-	suite.Require().EqualValues(20000000000-2500000-100000, user2Balances.AmountOf(denomBze).Int64())
-	suite.Require().EqualValues(10000000+1500000, user2Balances.AmountOf(denomStake).Int64())
 
 	all := suite.k.GetAllOrder(suite.ctx)
 	suite.Require().NotEmpty(all)
@@ -971,13 +1145,17 @@ func (suite *IntegrationTestSuite) TestMsgOrderFill_TwoOrdersOnePartialFill_Sell
 }
 
 func (suite *IntegrationTestSuite) TestMsgOrderFill_TwoOrdersOnePartialFill_Buy() {
-	allPrices, _, addr2 := suite.msgOrderFillSetup(types.OrderTypeBuy)
+	allPrices, addr1, addr2 := suite.msgOrderFillSetup(types.OrderTypeBuy)
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 
-	engine, err := keeper.NewProcessingEngine(suite.app.TradebinKeeper, suite.app.BankKeeper, suite.app.TradebinKeeper.Logger(suite.ctx))
+	engine, err := keeper.NewProcessingEngine(suite.k, suite.bankMock, suite.k.Logger(suite.ctx))
 	suite.Require().Nil(err)
 
 	engine.ProcessQueueMessages(suite.ctx)
+
+	params := suite.k.GetParams(suite.ctx)
+	takerFee, err := sdk.ParseCoinsNormalized(params.MarketTakerFee)
+	suite.Require().NoError(err)
 
 	//Let's fill 1 order with amount lower than the available order
 	fillOrder := types.MsgFillOrders{
@@ -996,6 +1174,9 @@ func (suite *IntegrationTestSuite) TestMsgOrderFill_TwoOrdersOnePartialFill_Buy(
 		},
 	}
 
+	paidCoins := sdk.NewCoins(sdk.NewCoin(market.Base, sdk.NewInt(1500000)))
+	suite.bankMock.EXPECT().SendCoinsFromAccountToModule(gomock.Any(), addr2, params.TakerFeeDestination, takerFee).Return(nil).Times(1)
+	suite.bankMock.EXPECT().SendCoinsFromAccountToModule(gomock.Any(), addr2, types.ModuleName, paidCoins).Return(nil).Times(1)
 	_, err = suite.msgServer.FillOrders(goCtx, &fillOrder)
 	suite.Require().NoError(err)
 
@@ -1017,13 +1198,12 @@ func (suite *IntegrationTestSuite) TestMsgOrderFill_TwoOrdersOnePartialFill_Buy(
 	suite.Require().Equal(qmList[1].Price, fillOrder.Orders[1].Price)
 	suite.Require().Equal(qmList[1].Owner, fillOrder.Creator)
 
+	//they receive in multiple bank calls: one for each message
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, addr1, sdk.NewCoins(sdk.NewCoin(market.Base, sdk.NewInt(1000000)))).Return(nil).Times(1)
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, addr1, sdk.NewCoins(sdk.NewCoin(market.Base, sdk.NewInt(500000)))).Return(nil).Times(1)
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, addr2, sdk.NewCoins(sdk.NewCoin(market.Quote, sdk.NewInt(1000000)))).Return(nil).Times(1)
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, addr2, sdk.NewCoins(sdk.NewCoin(market.Quote, sdk.NewInt(1500000)))).Return(nil).Times(1)
 	engine.ProcessQueueMessages(suite.ctx)
-
-	//check that the order was correctly executed and the user received/spent the amounts related to the order
-	user2Balances := suite.app.BankKeeper.GetAllBalances(suite.ctx, addr2)
-	//subtract the market making trading fee + the coins spent on the order
-	suite.Require().EqualValues(20000000000+2500000-100000, user2Balances.AmountOf(denomBze).Int64())
-	suite.Require().EqualValues(10000000-1500000, user2Balances.AmountOf(denomStake).Int64())
 
 	all := suite.k.GetAllOrder(suite.ctx)
 	suite.Require().NotEmpty(all)
@@ -1046,13 +1226,17 @@ func (suite *IntegrationTestSuite) TestMsgOrderFill_TwoOrdersOnePartialFill_Buy(
 }
 
 func (suite *IntegrationTestSuite) TestMsgOrderFill_TwoFullyFilledOrders_Buy() {
-	allPrices, _, addr2 := suite.msgOrderFillSetup(types.OrderTypeBuy)
+	allPrices, addr1, addr2 := suite.msgOrderFillSetup(types.OrderTypeBuy)
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 
-	engine, err := keeper.NewProcessingEngine(suite.app.TradebinKeeper, suite.app.BankKeeper, suite.app.TradebinKeeper.Logger(suite.ctx))
+	engine, err := keeper.NewProcessingEngine(suite.k, suite.bankMock, suite.k.Logger(suite.ctx))
 	suite.Require().Nil(err)
 
 	engine.ProcessQueueMessages(suite.ctx)
+
+	params := suite.k.GetParams(suite.ctx)
+	takerFee, err := sdk.ParseCoinsNormalized(params.MarketTakerFee)
+	suite.Require().NoError(err)
 
 	//Let's fill 1 order with amount lower than the available order
 	fillOrder := types.MsgFillOrders{
@@ -1071,6 +1255,9 @@ func (suite *IntegrationTestSuite) TestMsgOrderFill_TwoFullyFilledOrders_Buy() {
 		},
 	}
 
+	paidCoins := sdk.NewCoins(sdk.NewCoin(market.Base, sdk.NewInt(2000000)))
+	suite.bankMock.EXPECT().SendCoinsFromAccountToModule(gomock.Any(), addr2, params.MakerFeeDestination, takerFee).Return(nil).Times(1)
+	suite.bankMock.EXPECT().SendCoinsFromAccountToModule(gomock.Any(), addr2, types.ModuleName, paidCoins).Return(nil).Times(1)
 	_, err = suite.msgServer.FillOrders(goCtx, &fillOrder)
 	suite.Require().NoError(err)
 
@@ -1092,13 +1279,12 @@ func (suite *IntegrationTestSuite) TestMsgOrderFill_TwoFullyFilledOrders_Buy() {
 	suite.Require().Equal(qmList[1].Price, fillOrder.Orders[1].Price)
 	suite.Require().Equal(qmList[1].Owner, fillOrder.Creator)
 
+	//they receive in multiple bank calls: one for each message
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, addr1, sdk.NewCoins(sdk.NewCoin(market.Base, sdk.NewInt(1000000)))).Return(nil).Times(1)
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, addr1, sdk.NewCoins(sdk.NewCoin(market.Base, sdk.NewInt(1000000)))).Return(nil).Times(1)
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, addr2, sdk.NewCoins(sdk.NewCoin(market.Quote, sdk.NewInt(1000000)))).Return(nil).Times(1)
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, addr2, sdk.NewCoins(sdk.NewCoin(market.Quote, sdk.NewInt(3000000)))).Return(nil).Times(1)
 	engine.ProcessQueueMessages(suite.ctx)
-
-	//check that the order was correctly executed and the user received/spent the amounts related to the order
-	user2Balances := suite.app.BankKeeper.GetAllBalances(suite.ctx, addr2)
-	//subtract the market making trading fee + the coins spent on the order
-	suite.Require().EqualValues(20000000000+4000000-100000, user2Balances.AmountOf(denomBze).Int64())
-	suite.Require().EqualValues(10000000-2000000, user2Balances.AmountOf(denomStake).Int64())
 
 	all := suite.k.GetAllOrder(suite.ctx)
 	suite.Require().NotEmpty(all)
@@ -1111,13 +1297,17 @@ func (suite *IntegrationTestSuite) TestMsgOrderFill_TwoFullyFilledOrders_Buy() {
 }
 
 func (suite *IntegrationTestSuite) TestMsgOrderFill_TwoFullyFilledOrders_Sell() {
-	allPrices, _, addr2 := suite.msgOrderFillSetup(types.OrderTypeSell)
+	allPrices, addr1, addr2 := suite.msgOrderFillSetup(types.OrderTypeSell)
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 
-	engine, err := keeper.NewProcessingEngine(suite.app.TradebinKeeper, suite.app.BankKeeper, suite.app.TradebinKeeper.Logger(suite.ctx))
+	engine, err := keeper.NewProcessingEngine(suite.k, suite.bankMock, suite.k.Logger(suite.ctx))
 	suite.Require().Nil(err)
 
 	engine.ProcessQueueMessages(suite.ctx)
+
+	params := suite.k.GetParams(suite.ctx)
+	takerFee, err := sdk.ParseCoinsNormalized(params.MarketTakerFee)
+	suite.Require().NoError(err)
 
 	//Let's fill 1 order with amount lower than the available order
 	fillOrder := types.MsgFillOrders{
@@ -1136,11 +1326,12 @@ func (suite *IntegrationTestSuite) TestMsgOrderFill_TwoFullyFilledOrders_Sell() 
 		},
 	}
 
+	paidCoins := sdk.NewCoins(sdk.NewCoin(market.Quote, sdk.NewInt(4000000)))
+	suite.bankMock.EXPECT().SendCoinsFromAccountToModule(gomock.Any(), addr2, params.TakerFeeDestination, takerFee).Return(nil).Times(1)
+	suite.bankMock.EXPECT().SendCoinsFromAccountToModule(gomock.Any(), addr2, types.ModuleName, paidCoins).Return(nil).Times(1)
 	_, err = suite.msgServer.FillOrders(goCtx, &fillOrder)
 	suite.Require().NoError(err)
 
-	agg := suite.k.GetAllAggregatedOrder(suite.ctx)
-	_ = agg
 	//check that the new message is saved accordingly to queue messages storage
 	qmList := suite.k.GetAllQueueMessage(suite.ctx)
 	suite.Require().Len(qmList, 2)
@@ -1157,13 +1348,12 @@ func (suite *IntegrationTestSuite) TestMsgOrderFill_TwoFullyFilledOrders_Sell() 
 	suite.Require().Equal(qmList[1].Price, fillOrder.Orders[1].Price)
 	suite.Require().Equal(qmList[1].Owner, fillOrder.Creator)
 
+	//they receive in multiple bank calls: one for each message
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, addr1, sdk.NewCoins(sdk.NewCoin(market.Quote, sdk.NewInt(1000000)))).Return(nil).Times(1)
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, addr1, sdk.NewCoins(sdk.NewCoin(market.Quote, sdk.NewInt(3000000)))).Return(nil).Times(1)
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, addr2, sdk.NewCoins(sdk.NewCoin(market.Base, sdk.NewInt(1000000)))).Return(nil).Times(1)
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, addr2, sdk.NewCoins(sdk.NewCoin(market.Base, sdk.NewInt(1000000)))).Return(nil).Times(1)
 	engine.ProcessQueueMessages(suite.ctx)
-
-	//check that the order was correctly executed and the user received/spent the amounts related to the order
-	user2Balances := suite.app.BankKeeper.GetAllBalances(suite.ctx, addr2)
-	//subtract the market making trading fee + the coins spent on the order
-	suite.Require().EqualValues(20000000000-4000000-100000, user2Balances.AmountOf(denomBze).Int64())
-	suite.Require().EqualValues(10000000+2000000, user2Balances.AmountOf(denomStake).Int64())
 
 	all := suite.k.GetAllOrder(suite.ctx)
 	suite.Require().NotEmpty(all)
@@ -1176,12 +1366,15 @@ func (suite *IntegrationTestSuite) TestMsgOrderFill_TwoFullyFilledOrders_Sell() 
 }
 
 func (suite *IntegrationTestSuite) TestMsgOrderFill_OneFullyFilledOrderWithExtraAmount_Buy() {
-	allPrices, _, addr2 := suite.msgOrderFillSetup(types.OrderTypeBuy)
+	allPrices, addr1, addr2 := suite.msgOrderFillSetup(types.OrderTypeBuy)
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 
-	engine, err := keeper.NewProcessingEngine(suite.app.TradebinKeeper, suite.app.BankKeeper, suite.app.TradebinKeeper.Logger(suite.ctx))
+	engine, err := keeper.NewProcessingEngine(suite.k, suite.bankMock, suite.k.Logger(suite.ctx))
 	suite.Require().Nil(err)
 
+	engine.ProcessQueueMessages(suite.ctx)
+	params := suite.k.GetParams(suite.ctx)
+	takerFee, err := sdk.ParseCoinsNormalized(params.MarketTakerFee)
 	engine.ProcessQueueMessages(suite.ctx)
 
 	//Let's fill 1 order with amount lower than the available order
@@ -1197,14 +1390,11 @@ func (suite *IntegrationTestSuite) TestMsgOrderFill_OneFullyFilledOrderWithExtra
 		},
 	}
 
+	paidCoins := sdk.NewCoins(sdk.NewCoin(market.Base, sdk.NewInt(1500000)))
+	suite.bankMock.EXPECT().SendCoinsFromAccountToModule(gomock.Any(), addr2, params.MakerFeeDestination, takerFee).Return(nil).Times(1)
+	suite.bankMock.EXPECT().SendCoinsFromAccountToModule(gomock.Any(), addr2, types.ModuleName, paidCoins).Return(nil).Times(1)
 	_, err = suite.msgServer.FillOrders(goCtx, &fillOrder)
 	suite.Require().NoError(err)
-
-	//check user funds were fully deducted(after message processing the remaining will be refunded)
-	user2Balances := suite.app.BankKeeper.GetAllBalances(suite.ctx, addr2)
-	//subtract the market making trading fee + the coins spent on the order
-	suite.Require().EqualValues(20000000000-100000, user2Balances.AmountOf(denomBze).Int64())
-	suite.Require().EqualValues(10000000-1500000, user2Balances.AmountOf(denomStake).Int64())
 
 	//check that the new message is saved accordingly to queue messages storage
 	qmList := suite.k.GetAllQueueMessage(suite.ctx)
@@ -1216,13 +1406,12 @@ func (suite *IntegrationTestSuite) TestMsgOrderFill_OneFullyFilledOrderWithExtra
 	suite.Require().Equal(qmList[0].Price, fillOrder.Orders[0].Price)
 	suite.Require().Equal(qmList[0].Owner, fillOrder.Creator)
 
-	engine.ProcessQueueMessages(suite.ctx)
+	receivedCoins := sdk.NewCoins(sdk.NewCoin(market.Quote, sdk.NewInt(1000000)))
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, addr2, receivedCoins).Return(nil).Times(1)
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, addr2, sdk.NewCoins(sdk.NewCoin(market.Base, sdk.NewInt(500000)))).Return(nil).Times(1)
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, addr1, sdk.NewCoins(sdk.NewCoin(market.Base, sdk.NewInt(1000000)))).Return(nil).Times(1)
 
-	//check that the order was correctly executed and the user received/spent the amounts related to the order
-	user2Balances = suite.app.BankKeeper.GetAllBalances(suite.ctx, addr2)
-	//subtract the market making trading fee + the coins spent on the order
-	suite.Require().EqualValues(20000000000+1000000-100000, user2Balances.AmountOf(denomBze).Int64())
-	suite.Require().EqualValues(10000000-1000000, user2Balances.AmountOf(denomStake).Int64())
+	engine.ProcessQueueMessages(suite.ctx)
 
 	all := suite.k.GetAllOrder(suite.ctx)
 	suite.Require().NotEmpty(all)
@@ -1234,13 +1423,16 @@ func (suite *IntegrationTestSuite) TestMsgOrderFill_OneFullyFilledOrderWithExtra
 }
 
 func (suite *IntegrationTestSuite) TestMsgOrderFill_OneFullyFilledOrderWithExtraAmount_Sell() {
-	allPrices, _, addr2 := suite.msgOrderFillSetup(types.OrderTypeSell)
+	allPrices, addr1, addr2 := suite.msgOrderFillSetup(types.OrderTypeSell)
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 
-	engine, err := keeper.NewProcessingEngine(suite.app.TradebinKeeper, suite.app.BankKeeper, suite.app.TradebinKeeper.Logger(suite.ctx))
+	engine, err := keeper.NewProcessingEngine(suite.k, suite.bankMock, suite.k.Logger(suite.ctx))
 	suite.Require().Nil(err)
 
 	engine.ProcessQueueMessages(suite.ctx)
+
+	params := suite.k.GetParams(suite.ctx)
+	takerFee, err := sdk.ParseCoinsNormalized(params.MarketTakerFee)
 
 	//Let's fill 1 order with amount lower than the available order
 	fillOrder := types.MsgFillOrders{
@@ -1255,17 +1447,12 @@ func (suite *IntegrationTestSuite) TestMsgOrderFill_OneFullyFilledOrderWithExtra
 		},
 	}
 
+	paidCoins := sdk.NewCoins(sdk.NewCoin(market.Quote, sdk.NewInt(1500000)))
+	suite.bankMock.EXPECT().SendCoinsFromAccountToModule(gomock.Any(), addr2, params.MakerFeeDestination, takerFee).Return(nil).Times(1)
+	suite.bankMock.EXPECT().SendCoinsFromAccountToModule(gomock.Any(), addr2, types.ModuleName, paidCoins).Return(nil).Times(1)
 	_, err = suite.msgServer.FillOrders(goCtx, &fillOrder)
 	suite.Require().NoError(err)
 
-	//check user funds were fully deducted(after message processing the remaining will be refunded)
-	user2Balances := suite.app.BankKeeper.GetAllBalances(suite.ctx, addr2)
-	//subtract the market making trading fee + the coins spent on the order
-	suite.Require().EqualValues(20000000000-100000-1500000, user2Balances.AmountOf(denomBze).Int64())
-	suite.Require().EqualValues(10000000, user2Balances.AmountOf(denomStake).Int64())
-
-	agg := suite.k.GetAllAggregatedOrder(suite.ctx)
-	_ = agg
 	//check that the new message is saved accordingly to queue messages storage
 	qmList := suite.k.GetAllQueueMessage(suite.ctx)
 	suite.Require().Len(qmList, 1)
@@ -1276,13 +1463,11 @@ func (suite *IntegrationTestSuite) TestMsgOrderFill_OneFullyFilledOrderWithExtra
 	suite.Require().Equal(qmList[0].Price, fillOrder.Orders[0].Price)
 	suite.Require().Equal(qmList[0].Owner, fillOrder.Creator)
 
-	engine.ProcessQueueMessages(suite.ctx)
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, addr2, sdk.NewCoins(sdk.NewCoin(market.Base, sdk.NewInt(1000000)))).Return(nil).Times(1)
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, addr2, sdk.NewCoins(sdk.NewCoin(market.Quote, sdk.NewInt(500000)))).Return(nil).Times(1)
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, addr1, sdk.NewCoins(sdk.NewCoin(market.Quote, sdk.NewInt(1000000)))).Return(nil).Times(1)
 
-	//check that the order was correctly executed and the user received/spent the amounts related to the order
-	user2Balances = suite.app.BankKeeper.GetAllBalances(suite.ctx, addr2)
-	//subtract the market making trading fee + the coins spent on the order
-	suite.Require().EqualValues(20000000000-1000000-100000, user2Balances.AmountOf(denomBze).Int64())
-	suite.Require().EqualValues(10000000+1000000, user2Balances.AmountOf(denomStake).Int64())
+	engine.ProcessQueueMessages(suite.ctx)
 
 	all := suite.k.GetAllOrder(suite.ctx)
 	suite.Require().NotEmpty(all)
@@ -1294,13 +1479,15 @@ func (suite *IntegrationTestSuite) TestMsgOrderFill_OneFullyFilledOrderWithExtra
 }
 
 func (suite *IntegrationTestSuite) TestMsgOrderFill_TwoFullyFilledOrdersWithExtraAmounts_Buy() {
-	allPrices, _, addr2 := suite.msgOrderFillSetup(types.OrderTypeBuy)
+	allPrices, addr1, addr2 := suite.msgOrderFillSetup(types.OrderTypeBuy)
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 
-	engine, err := keeper.NewProcessingEngine(suite.app.TradebinKeeper, suite.app.BankKeeper, suite.app.TradebinKeeper.Logger(suite.ctx))
+	engine, err := keeper.NewProcessingEngine(suite.k, suite.bankMock, suite.k.Logger(suite.ctx))
 	suite.Require().Nil(err)
 
 	engine.ProcessQueueMessages(suite.ctx)
+	params := suite.k.GetParams(suite.ctx)
+	takerFee, err := sdk.ParseCoinsNormalized(params.MarketTakerFee)
 
 	//Let's fill 1 order with amount lower than the available order
 	fillOrder := types.MsgFillOrders{
@@ -1319,14 +1506,11 @@ func (suite *IntegrationTestSuite) TestMsgOrderFill_TwoFullyFilledOrdersWithExtr
 		},
 	}
 
+	paidCoins := sdk.NewCoins(sdk.NewCoin(market.Base, sdk.NewInt(3500000)))
+	suite.bankMock.EXPECT().SendCoinsFromAccountToModule(gomock.Any(), addr2, params.MakerFeeDestination, takerFee).Return(nil).Times(1)
+	suite.bankMock.EXPECT().SendCoinsFromAccountToModule(gomock.Any(), addr2, types.ModuleName, paidCoins).Return(nil).Times(1)
 	_, err = suite.msgServer.FillOrders(goCtx, &fillOrder)
 	suite.Require().NoError(err)
-
-	//check user funds were fully deducted(after message processing the remaining will be refunded)
-	user2Balances := suite.app.BankKeeper.GetAllBalances(suite.ctx, addr2)
-	//subtract the market making trading fee + the coins spent on the order
-	suite.Require().EqualValues(20000000000-100000, user2Balances.AmountOf(denomBze).Int64())
-	suite.Require().EqualValues(10000000-3500000, user2Balances.AmountOf(denomStake).Int64())
 
 	//check that the new message is saved accordingly to queue messages storage
 	qmList := suite.k.GetAllQueueMessage(suite.ctx)
@@ -1344,13 +1528,14 @@ func (suite *IntegrationTestSuite) TestMsgOrderFill_TwoFullyFilledOrdersWithExtr
 	suite.Require().Equal(qmList[1].Price, fillOrder.Orders[1].Price)
 	suite.Require().Equal(qmList[1].Owner, fillOrder.Creator)
 
-	engine.ProcessQueueMessages(suite.ctx)
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, addr2, sdk.NewCoins(sdk.NewCoin(market.Quote, sdk.NewInt(1000000)))).Return(nil).Times(1)
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, addr2, sdk.NewCoins(sdk.NewCoin(market.Quote, sdk.NewInt(3000000)))).Return(nil).Times(1)
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, addr2, sdk.NewCoins(sdk.NewCoin(market.Base, sdk.NewInt(1000000)))).Return(nil).Times(1)
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, addr2, sdk.NewCoins(sdk.NewCoin(market.Base, sdk.NewInt(500000)))).Return(nil).Times(1)
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, addr1, sdk.NewCoins(sdk.NewCoin(market.Base, sdk.NewInt(1000000)))).Return(nil).Times(1)
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, addr1, sdk.NewCoins(sdk.NewCoin(market.Base, sdk.NewInt(1000000)))).Return(nil).Times(1)
 
-	//check that the order was correctly executed and the user received/spent the amounts related to the order
-	user2Balances = suite.app.BankKeeper.GetAllBalances(suite.ctx, addr2)
-	//subtract the market making trading fee + the coins spent on the order
-	suite.Require().EqualValues(20000000000+4000000-100000, user2Balances.AmountOf(denomBze).Int64())
-	suite.Require().EqualValues(10000000-2000000, user2Balances.AmountOf(denomStake).Int64())
+	engine.ProcessQueueMessages(suite.ctx)
 
 	all := suite.k.GetAllOrder(suite.ctx)
 	suite.Require().NotEmpty(all)
@@ -1364,13 +1549,16 @@ func (suite *IntegrationTestSuite) TestMsgOrderFill_TwoFullyFilledOrdersWithExtr
 }
 
 func (suite *IntegrationTestSuite) TestMsgOrderFill_TwoFullyFilledOrdersWithExtraAmounts_Sell() {
-	allPrices, _, addr2 := suite.msgOrderFillSetup(types.OrderTypeSell)
+	allPrices, addr1, addr2 := suite.msgOrderFillSetup(types.OrderTypeSell)
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 
-	engine, err := keeper.NewProcessingEngine(suite.app.TradebinKeeper, suite.app.BankKeeper, suite.app.TradebinKeeper.Logger(suite.ctx))
+	engine, err := keeper.NewProcessingEngine(suite.k, suite.bankMock, suite.k.Logger(suite.ctx))
 	suite.Require().Nil(err)
 
 	engine.ProcessQueueMessages(suite.ctx)
+	params := suite.k.GetParams(suite.ctx)
+	takerFee, err := sdk.ParseCoinsNormalized(params.MarketTakerFee)
+	suite.Require().NoError(err)
 
 	//Let's fill 1 order with amount lower than the available order
 	fillOrder := types.MsgFillOrders{
@@ -1389,14 +1577,11 @@ func (suite *IntegrationTestSuite) TestMsgOrderFill_TwoFullyFilledOrdersWithExtr
 		},
 	}
 
+	paidCoins := sdk.NewCoins(sdk.NewCoin(market.Quote, sdk.NewInt(6500000)))
+	suite.bankMock.EXPECT().SendCoinsFromAccountToModule(gomock.Any(), addr2, params.TakerFeeDestination, takerFee).Return(nil).Times(1)
+	suite.bankMock.EXPECT().SendCoinsFromAccountToModule(gomock.Any(), addr2, types.ModuleName, paidCoins).Return(nil).Times(1)
 	_, err = suite.msgServer.FillOrders(goCtx, &fillOrder)
 	suite.Require().NoError(err)
-
-	//check user funds were fully deducted(after message processing the remaining will be refunded)
-	user2Balances := suite.app.BankKeeper.GetAllBalances(suite.ctx, addr2)
-	//subtract the market making trading fee + the coins spent on the order
-	suite.Require().EqualValues(20000000000-6500000-100000, user2Balances.AmountOf(denomBze).Int64())
-	suite.Require().EqualValues(10000000, user2Balances.AmountOf(denomStake).Int64())
 
 	//check that the new message is saved accordingly to queue messages storage
 	qmList := suite.k.GetAllQueueMessage(suite.ctx)
@@ -1414,13 +1599,14 @@ func (suite *IntegrationTestSuite) TestMsgOrderFill_TwoFullyFilledOrdersWithExtr
 	suite.Require().Equal(qmList[1].Price, fillOrder.Orders[1].Price)
 	suite.Require().Equal(qmList[1].Owner, fillOrder.Creator)
 
+	//they receive in multiple bank calls: one for each message
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, addr2, sdk.NewCoins(sdk.NewCoin(market.Base, sdk.NewInt(1000000)))).Return(nil).Times(1)
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, addr2, sdk.NewCoins(sdk.NewCoin(market.Quote, sdk.NewInt(1000000)))).Return(nil).Times(1)
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, addr1, sdk.NewCoins(sdk.NewCoin(market.Quote, sdk.NewInt(1000000)))).Return(nil).Times(1)
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, addr2, sdk.NewCoins(sdk.NewCoin(market.Base, sdk.NewInt(1000000)))).Return(nil).Times(1)
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, addr2, sdk.NewCoins(sdk.NewCoin(market.Quote, sdk.NewInt(1500000)))).Return(nil).Times(1)
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, addr1, sdk.NewCoins(sdk.NewCoin(market.Quote, sdk.NewInt(3000000)))).Return(nil).Times(1)
 	engine.ProcessQueueMessages(suite.ctx)
-
-	//check that the order was correctly executed and the user received/spent the amounts related to the order
-	user2Balances = suite.app.BankKeeper.GetAllBalances(suite.ctx, addr2)
-	//subtract the market making trading fee + the coins spent on the order
-	suite.Require().EqualValues(20000000000-4000000-100000, user2Balances.AmountOf(denomBze).Int64())
-	suite.Require().EqualValues(10000000+2000000, user2Balances.AmountOf(denomStake).Int64())
 
 	all := suite.k.GetAllOrder(suite.ctx)
 	suite.Require().NotEmpty(all)
@@ -1434,14 +1620,17 @@ func (suite *IntegrationTestSuite) TestMsgOrderFill_TwoFullyFilledOrdersWithExtr
 }
 
 func (suite *IntegrationTestSuite) TestMsgOrderFill_FillAllWithExtraAmounts_Sell() {
-	allPrices, _, addr2 := suite.msgOrderFillSetup(types.OrderTypeSell)
+	allPrices, addr1, addr2 := suite.msgOrderFillSetup(types.OrderTypeSell)
 	suite.Require().NotEmpty(allPrices)
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 
-	engine, err := keeper.NewProcessingEngine(suite.app.TradebinKeeper, suite.app.BankKeeper, suite.app.TradebinKeeper.Logger(suite.ctx))
+	engine, err := keeper.NewProcessingEngine(suite.k, suite.bankMock, suite.k.Logger(suite.ctx))
 	suite.Require().Nil(err)
 
 	engine.ProcessQueueMessages(suite.ctx)
+	params := suite.k.GetParams(suite.ctx)
+	takerFee, err := sdk.ParseCoinsNormalized(params.MarketTakerFee)
+	suite.Require().NoError(err)
 
 	fillOrder := types.MsgFillOrders{
 		Creator:   addr2.String(),
@@ -1470,40 +1659,50 @@ func (suite *IntegrationTestSuite) TestMsgOrderFill_FillAllWithExtraAmounts_Sell
 		expectedBaseAmount = expectedBaseAmount.AddRaw(1000000)
 	}
 
+	paidCoins := sdk.NewCoins(sdk.NewCoin(market.Quote, quoteAmount))
+	suite.bankMock.EXPECT().SendCoinsFromAccountToModule(gomock.Any(), addr2, types.ModuleName, paidCoins).Return(nil).Times(1)
+	suite.bankMock.EXPECT().SendCoinsFromAccountToModule(gomock.Any(), addr2, params.TakerFeeDestination, takerFee).Return(nil).Times(1)
 	_, err = suite.msgServer.FillOrders(goCtx, &fillOrder)
 	suite.Require().NoError(err)
-
-	user2Balances := suite.app.BankKeeper.GetAllBalances(suite.ctx, addr2)
-	//subtract the market making trading fee + the coins spent on the order
-	suite.Require().EqualValues(20000000000-100000-quoteAmount.Int64(), user2Balances.AmountOf(denomBze).Int64())
-	suite.Require().EqualValues(10000000, user2Balances.AmountOf(denomStake).Int64())
 
 	qmList := suite.k.GetAllQueueMessage(suite.ctx)
 	suite.Require().Len(qmList, len(allPrices))
 
+	//they receive in multiple bank calls: one for each FillOrderItem
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, addr1, gomock.Any()).Return(nil).Times(len(allPrices))
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, addr2, gomock.Any()).
+		DoAndReturn(func(ctx sdk.Context, moduleName string, recipient sdk.AccAddress, coins sdk.Coins) error {
+			for _, c := range coins {
+				if c.Denom == market.Base {
+					expectedBaseAmount = expectedBaseAmount.Sub(c.Amount)
+				} else if c.Denom == market.Quote {
+					quoteAmount = quoteAmount.Sub(c.Amount)
+				}
+			}
+
+			return nil
+		}).Times(len(allPrices) * 2)
+
 	engine.ProcessQueueMessages(suite.ctx)
 
-	//check that the order was correctly executed and the user received/spent the amounts related to the order
-	user2Balances = suite.app.BankKeeper.GetAllBalances(suite.ctx, addr2)
-	//subtract the market making trading fee + the coins spent on the order
-	suite.Require().EqualValues(20000000000-100000-expectedQuoteAmount.Int64(), user2Balances.AmountOf(denomBze).Int64())
-	suite.Require().EqualValues(10000000+expectedBaseAmount.Int64(), user2Balances.AmountOf(denomStake).Int64())
+	suite.Require().True(expectedBaseAmount.IsZero())
+	suite.Require().True(quoteAmount.Equal(expectedQuoteAmount))
 
 	all := suite.k.GetAllOrder(suite.ctx)
 	suite.Require().Empty(all)
 }
 
 func (suite *IntegrationTestSuite) TestMsgOrderFill_FillAllWithExtraAmounts_Buy() {
-	allPrices, _, addr2 := suite.msgOrderFillSetup(types.OrderTypeBuy)
+	allPrices, addr1, addr2 := suite.msgOrderFillSetup(types.OrderTypeBuy)
 	suite.Require().NotEmpty(allPrices)
 
-	//add an extra 10,000,000 STAKE to addr2 because it will fill buy orders (it sells STAKE)
-	balances := sdk.NewCoins(newStakeCoin(10000000))
-	suite.Require().NoError(simapp.FundAccount(suite.app.BankKeeper, suite.ctx, addr2, balances))
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 
-	engine, err := keeper.NewProcessingEngine(suite.app.TradebinKeeper, suite.app.BankKeeper, suite.app.TradebinKeeper.Logger(suite.ctx))
+	engine, err := keeper.NewProcessingEngine(suite.k, suite.bankMock, suite.k.Logger(suite.ctx))
 	suite.Require().Nil(err)
+	params := suite.k.GetParams(suite.ctx)
+	takerFee, err := sdk.ParseCoinsNormalized(params.MarketTakerFee)
+	suite.Require().NoError(err)
 
 	engine.ProcessQueueMessages(suite.ctx)
 
@@ -1534,24 +1733,34 @@ func (suite *IntegrationTestSuite) TestMsgOrderFill_FillAllWithExtraAmounts_Buy(
 		expectedBaseAmount = expectedBaseAmount.AddRaw(1000000)
 	}
 
+	paidCoins := sdk.NewCoins(sdk.NewCoin(market.Base, baseAmount))
+	suite.bankMock.EXPECT().SendCoinsFromAccountToModule(gomock.Any(), addr2, types.ModuleName, paidCoins).Return(nil).Times(1)
+	suite.bankMock.EXPECT().SendCoinsFromAccountToModule(gomock.Any(), addr2, params.TakerFeeDestination, takerFee).Return(nil).Times(1)
 	_, err = suite.msgServer.FillOrders(goCtx, &fillOrder)
 	suite.Require().NoError(err)
-
-	user2Balances := suite.app.BankKeeper.GetAllBalances(suite.ctx, addr2)
-	//subtract the market making trading fee + the coins spent on the order
-	suite.Require().EqualValues(20000000000-100000, user2Balances.AmountOf(denomBze).Int64())
-	suite.Require().EqualValues(20000000-baseAmount.Int64(), user2Balances.AmountOf(denomStake).Int64())
 
 	qmList := suite.k.GetAllQueueMessage(suite.ctx)
 	suite.Require().Len(qmList, len(allPrices))
 
+	//they receive in multiple bank calls: one for each FillOrderItem
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, addr1, gomock.Any()).Return(nil).Times(len(allPrices))
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, addr2, gomock.Any()).
+		DoAndReturn(func(ctx sdk.Context, moduleName string, recipient sdk.AccAddress, coins sdk.Coins) error {
+			for _, c := range coins {
+				if c.Denom == market.Base {
+					baseAmount = baseAmount.Sub(c.Amount)
+				} else if c.Denom == market.Quote {
+					expectedQuoteAmount = expectedQuoteAmount.Sub(c.Amount)
+				}
+			}
+
+			return nil
+		}).Times(len(allPrices) * 2)
+
 	engine.ProcessQueueMessages(suite.ctx)
 
-	//check that the order was correctly executed and the user received/spent the amounts related to the order
-	user2Balances = suite.app.BankKeeper.GetAllBalances(suite.ctx, addr2)
-	//subtract the market making trading fee + the coins spent on the order
-	suite.Require().EqualValues(20000000000-100000+expectedQuoteAmount.Int64(), user2Balances.AmountOf(denomBze).Int64())
-	suite.Require().EqualValues(20000000-expectedBaseAmount.Int64(), user2Balances.AmountOf(denomStake).Int64())
+	suite.Require().True(expectedQuoteAmount.IsZero())
+	suite.Require().True(baseAmount.Equal(expectedBaseAmount))
 
 	all := suite.k.GetAllOrder(suite.ctx)
 	suite.Require().Empty(all)

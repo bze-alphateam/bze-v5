@@ -21,17 +21,17 @@ func TestGenesisState_Validate(t *testing.T) {
 		{
 			desc: "valid genesis state",
 			genState: &types.GenesisState{
-
 				MarketList: []types.Market{
 					{
-						Asset1: "0",
-						Asset2: "0",
+						Base:  "0",
+						Quote: "0",
 					},
 					{
-						Asset1: "1",
-						Asset2: "1",
+						Base:  "1",
+						Quote: "1",
 					},
 				},
+				Params: types.DefaultParams(),
 				// this line is used by starport scaffolding # types/genesis/validField
 			},
 			valid: true,
@@ -41,14 +41,15 @@ func TestGenesisState_Validate(t *testing.T) {
 			genState: &types.GenesisState{
 				MarketList: []types.Market{
 					{
-						Asset1: "0",
-						Asset2: "0",
+						Base:  "0",
+						Quote: "0",
 					},
 					{
-						Asset1: "0",
-						Asset2: "0",
+						Base:  "0",
+						Quote: "0",
 					},
 				},
+				Params: types.DefaultParams(),
 			},
 			valid: false,
 		},

@@ -1,6 +1,7 @@
 package tradebin_test
 
 import (
+	"github.com/bze-alphateam/bze/x/tradebin/testutil"
 	"testing"
 
 	keepertest "github.com/bze-alphateam/bze/testutil/keeper"
@@ -8,6 +9,7 @@ import (
 	"github.com/bze-alphateam/bze/x/tradebin"
 	"github.com/bze-alphateam/bze/x/tradebin/types"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 )
 
 func TestGenesis(t *testing.T) {
@@ -16,18 +18,27 @@ func TestGenesis(t *testing.T) {
 
 		MarketList: []types.Market{
 			{
-				Asset1: "0",
-				Asset2: "0",
+				Base:  "0",
+				Quote: "0",
 			},
 			{
-				Asset1: "1",
-				Asset2: "1",
+				Base:  "1",
+				Quote: "1",
 			},
 		},
 		// this line is used by starport scaffolding # genesis/test/state
 	}
 
-	k, ctx := keepertest.TradebinKeeper(t)
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	mockBank := testutil.NewMockBankKeeper(mockCtrl)
+	require.NotNil(t, mockBank)
+
+	mockDistr := testutil.NewMockDistrKeeper(mockCtrl)
+	require.NotNil(t, mockBank)
+
+	k, ctx := keepertest.TradebinKeeper(t, mockBank, mockDistr)
 	tradebin.InitGenesis(ctx, *k, genesisState)
 	got := tradebin.ExportGenesis(ctx, *k)
 	require.NotNil(t, got)
