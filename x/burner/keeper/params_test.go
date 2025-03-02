@@ -9,7 +9,7 @@ import (
 )
 
 func TestGetParams(t *testing.T) {
-	k, ctx := testkeeper.BurnerKeeper(t)
+	k, ctx := testkeeper.BurnerKeeper(t, nil, nil, nil)
 	params := types.DefaultParams()
 
 	k.SetParams(ctx, params)

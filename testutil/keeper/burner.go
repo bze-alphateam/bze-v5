@@ -17,7 +17,7 @@ import (
 	tmdb "github.com/tendermint/tm-db"
 )
 
-func BurnerKeeper(t testing.TB) (*keeper.Keeper, sdk.Context) {
+func BurnerKeeper(t testing.TB, bank types.BankKeeper, acc types.AccountKeeper, epochs types.EpochKeeper) (*keeper.Keeper, sdk.Context) {
 	storeKey := sdk.NewKVStoreKey(types.StoreKey)
 	memStoreKey := storetypes.NewMemoryStoreKey(types.MemStoreKey)
 
@@ -41,9 +41,9 @@ func BurnerKeeper(t testing.TB) (*keeper.Keeper, sdk.Context) {
 		storeKey,
 		memStoreKey,
 		paramsSubspace,
-		nil,
-		nil,
-		nil,
+		bank,
+		acc,
+		epochs,
 	)
 
 	ctx := sdk.NewContext(stateStore, tmproto.Header{}, false, log.NewNopLogger())

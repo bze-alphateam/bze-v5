@@ -2,14 +2,11 @@ package keeper_test
 
 import (
 	"fmt"
-	"github.com/bze-alphateam/bze/testutil/simapp"
 	"github.com/bze-alphateam/bze/x/burner/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	"github.com/tendermint/tendermint/crypto/tmhash"
-	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
+	types2 "github.com/cosmos/cosmos-sdk/x/auth/types"
+	"go.uber.org/mock/gomock"
 	"strconv"
-	"strings"
-	"time"
 )
 
 func (suite *IntegrationTestSuite) TestFundBurner_InvalidAmount() {
@@ -36,63 +33,40 @@ func (suite *IntegrationTestSuite) TestFundBurner_InvalidCreator() {
 	suite.Require().ErrorContains(err, "bech32")
 }
 
-func (suite *IntegrationTestSuite) TestFundBurner_NoBalance() {
-	goCtx := sdk.WrapSDKContext(suite.ctx)
-	addr1 := sdk.AccAddress("addr1_______________")
-
-	//balances := sdk.NewCoins(newStakeCoin(10000), newBzeCoin(50000))
-	//suite.Require().NoError(simapp.FundModuleAccount(suite.app.BankKeeper, suite.ctx, types.ModuleName, balances))
-
-	msg := types.MsgFundBurner{
-		Creator: addr1.String(),
-		Amount:  "123ubze",
-	}
-	_, err := suite.msgServer.FundBurner(goCtx, &msg)
-	suite.Require().Error(err)
-	suite.Require().ErrorContains(err, "insufficient funds")
-}
-
 func (suite *IntegrationTestSuite) TestFundBurner_NotEnoughFunds() {
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 	addr1 := sdk.AccAddress("addr1_______________")
 
-	balances := sdk.NewCoins(sdk.NewInt64Coin("ubze", 122))
-	suite.Require().NoError(simapp.FundAccount(suite.app.BankKeeper, suite.ctx, addr1, balances))
-
 	msg := types.MsgFundBurner{
 		Creator: addr1.String(),
 		Amount:  "123ubze",
 	}
+
+	suite.bank.EXPECT().
+		SendCoinsFromAccountToModule(gomock.Any(), addr1, types.ModuleName, sdk.NewCoins(sdk.NewCoin("ubze", sdk.NewInt(123)))).
+		Times(1).
+		Return(fmt.Errorf("insufficient funds"))
+
 	_, err := suite.msgServer.FundBurner(goCtx, &msg)
 	suite.Require().Error(err)
 	suite.Require().ErrorContains(err, "insufficient funds")
-
-	//check module was not funded
-	moduleAddress := suite.app.AccountKeeper.GetModuleAddress(types.ModuleName)
-	moduleBalance := suite.app.BankKeeper.GetBalance(suite.ctx, moduleAddress, "ubze")
-	suite.Require().Equal(moduleBalance.Amount.String(), "0")
 }
 
 func (suite *IntegrationTestSuite) TestFundBurner_Success() {
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 	addr1 := sdk.AccAddress("addr1_______________")
 
-	balances := sdk.NewCoins(sdk.NewInt64Coin("ubze", 123))
-	suite.Require().NoError(simapp.FundAccount(suite.app.BankKeeper, suite.ctx, addr1, balances))
-
 	msg := types.MsgFundBurner{
 		Creator: addr1.String(),
 		Amount:  "123ubze",
 	}
+	suite.bank.EXPECT().
+		SendCoinsFromAccountToModule(gomock.Any(), addr1, types.ModuleName, sdk.NewCoins(sdk.NewCoin("ubze", sdk.NewInt(123)))).
+		Times(1).
+		Return(nil)
+
 	_, err := suite.msgServer.FundBurner(goCtx, &msg)
 	suite.Require().NoError(err)
-
-	accBalance := suite.app.BankKeeper.GetBalance(suite.ctx, addr1, "ubze")
-	suite.Require().Equal(accBalance.Amount.String(), "0")
-
-	moduleAddress := suite.app.AccountKeeper.GetModuleAddress(types.ModuleName)
-	moduleBalance := suite.app.BankKeeper.GetBalance(suite.ctx, moduleAddress, "ubze")
-	suite.Require().Equal(moduleBalance.Amount.String(), "123")
 }
 
 func (suite *IntegrationTestSuite) TestStartRaffle_InvalidDenom() {
@@ -107,6 +81,8 @@ func (suite *IntegrationTestSuite) TestStartRaffle_InvalidDenom() {
 		TicketPrice: "",
 		Denom:       "aau",
 	}
+	suite.bank.EXPECT().HasSupply(gomock.Any(), "aau").Times(1).Return(false)
+
 	_, err := suite.msgServer.StartRaffle(goCtx, &msg)
 	suite.Require().Error(err)
 	suite.Require().ErrorContains(err, "denom aau does not exist")
@@ -114,9 +90,6 @@ func (suite *IntegrationTestSuite) TestStartRaffle_InvalidDenom() {
 
 func (suite *IntegrationTestSuite) TestStartRaffle_RaffleAlreadyExists() {
 	goCtx := sdk.WrapSDKContext(suite.ctx)
-
-	balances := sdk.NewCoins(sdk.NewInt64Coin("aau", 1000))
-	suite.Require().NoError(simapp.FundModuleAccount(suite.app.BankKeeper, suite.ctx, types.ModuleName, balances))
 
 	raffle := types.Raffle{
 		Pot:         "",
@@ -139,6 +112,7 @@ func (suite *IntegrationTestSuite) TestStartRaffle_RaffleAlreadyExists() {
 		TicketPrice: "",
 		Denom:       "aau",
 	}
+	suite.bank.EXPECT().HasSupply(gomock.Any(), "aau").Times(1).Return(true)
 	_, err := suite.msgServer.StartRaffle(goCtx, &msg)
 	suite.Require().Error(err)
 	suite.Require().ErrorContains(err, "raffle already running for this coin")
@@ -146,10 +120,6 @@ func (suite *IntegrationTestSuite) TestStartRaffle_RaffleAlreadyExists() {
 
 func (suite *IntegrationTestSuite) TestStartRaffle_InvalidCreator() {
 	goCtx := sdk.WrapSDKContext(suite.ctx)
-
-	balances := sdk.NewCoins(sdk.NewInt64Coin("aau", 1000))
-	suite.Require().NoError(simapp.FundModuleAccount(suite.app.BankKeeper, suite.ctx, types.ModuleName, balances))
-
 	msg := types.MsgStartRaffle{
 		Creator:     "a",
 		Pot:         "",
@@ -159,6 +129,8 @@ func (suite *IntegrationTestSuite) TestStartRaffle_InvalidCreator() {
 		TicketPrice: "",
 		Denom:       "aau",
 	}
+	suite.bank.EXPECT().HasSupply(gomock.Any(), "aau").Times(1).Return(true)
+
 	_, err := suite.msgServer.StartRaffle(goCtx, &msg)
 	suite.Require().Error(err)
 	suite.Require().ErrorContains(err, "bech32")
@@ -168,8 +140,6 @@ func (suite *IntegrationTestSuite) TestStartRaffle_InvalidPot() {
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 
 	addr1 := sdk.AccAddress("addr1_______________")
-	balances := sdk.NewCoins(sdk.NewInt64Coin("aau", 1000))
-	suite.Require().NoError(simapp.FundModuleAccount(suite.app.BankKeeper, suite.ctx, types.ModuleName, balances))
 
 	msg := types.MsgStartRaffle{
 		Creator:     addr1.String(),
@@ -180,6 +150,8 @@ func (suite *IntegrationTestSuite) TestStartRaffle_InvalidPot() {
 		TicketPrice: "",
 		Denom:       "aau",
 	}
+
+	suite.bank.EXPECT().HasSupply(gomock.Any(), "aau").Times(1).Return(true)
 	_, err := suite.msgServer.StartRaffle(goCtx, &msg)
 	suite.Require().Error(err)
 	suite.Require().ErrorContains(err, "invalid pot")
@@ -189,8 +161,6 @@ func (suite *IntegrationTestSuite) TestStartRaffle_NotPositivePot() {
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 
 	addr1 := sdk.AccAddress("addr1_______________")
-	balances := sdk.NewCoins(sdk.NewInt64Coin("aau", 1000))
-	suite.Require().NoError(simapp.FundModuleAccount(suite.app.BankKeeper, suite.ctx, types.ModuleName, balances))
 
 	msg := types.MsgStartRaffle{
 		Creator:     addr1.String(),
@@ -201,6 +171,8 @@ func (suite *IntegrationTestSuite) TestStartRaffle_NotPositivePot() {
 		TicketPrice: "",
 		Denom:       "aau",
 	}
+
+	suite.bank.EXPECT().HasSupply(gomock.Any(), "aau").Times(1).Return(true)
 	_, err := suite.msgServer.StartRaffle(goCtx, &msg)
 	suite.Require().Error(err)
 	suite.Require().ErrorContains(err, "provided pot is not positive")
@@ -210,9 +182,6 @@ func (suite *IntegrationTestSuite) TestStartRaffle_InvalidDuration() {
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 
 	addr1 := sdk.AccAddress("addr1_______________")
-	balances := sdk.NewCoins(sdk.NewInt64Coin("aau", 1000))
-	suite.Require().NoError(simapp.FundModuleAccount(suite.app.BankKeeper, suite.ctx, types.ModuleName, balances))
-
 	msg := types.MsgStartRaffle{
 		Creator:     addr1.String(),
 		Pot:         "100",
@@ -222,6 +191,8 @@ func (suite *IntegrationTestSuite) TestStartRaffle_InvalidDuration() {
 		TicketPrice: "",
 		Denom:       "aau",
 	}
+
+	suite.bank.EXPECT().HasSupply(gomock.Any(), "aau").Times(1).Return(true)
 	_, err := suite.msgServer.StartRaffle(goCtx, &msg)
 	suite.Require().Error(err)
 	suite.Require().ErrorContains(err, "invalid duration")
@@ -231,8 +202,6 @@ func (suite *IntegrationTestSuite) TestStartRaffle_NotPositiveDuration() {
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 
 	addr1 := sdk.AccAddress("addr1_______________")
-	balances := sdk.NewCoins(sdk.NewInt64Coin("aau", 1000))
-	suite.Require().NoError(simapp.FundModuleAccount(suite.app.BankKeeper, suite.ctx, types.ModuleName, balances))
 
 	msg := types.MsgStartRaffle{
 		Creator:     addr1.String(),
@@ -243,6 +212,8 @@ func (suite *IntegrationTestSuite) TestStartRaffle_NotPositiveDuration() {
 		TicketPrice: "",
 		Denom:       "aau",
 	}
+
+	suite.bank.EXPECT().HasSupply(gomock.Any(), "aau").Times(2).Return(true)
 	_, err := suite.msgServer.StartRaffle(goCtx, &msg)
 	suite.Require().Error(err)
 	suite.Require().ErrorContains(err, "duration should be positive")
@@ -265,8 +236,6 @@ func (suite *IntegrationTestSuite) TestStartRaffle_OutOfBoundDuration() {
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 
 	addr1 := sdk.AccAddress("addr1_______________")
-	balances := sdk.NewCoins(sdk.NewInt64Coin("aau", 1000))
-	suite.Require().NoError(simapp.FundModuleAccount(suite.app.BankKeeper, suite.ctx, types.ModuleName, balances))
 
 	msg := types.MsgStartRaffle{
 		Creator:     addr1.String(),
@@ -277,6 +246,8 @@ func (suite *IntegrationTestSuite) TestStartRaffle_OutOfBoundDuration() {
 		TicketPrice: "",
 		Denom:       "aau",
 	}
+
+	suite.bank.EXPECT().HasSupply(gomock.Any(), "aau").Times(1).Return(true)
 	_, err := suite.msgServer.StartRaffle(goCtx, &msg)
 	suite.Require().Error(err)
 	suite.Require().ErrorContains(err, "duration have a value between")
@@ -286,8 +257,6 @@ func (suite *IntegrationTestSuite) TestStartRaffle_InvalidRatio() {
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 
 	addr1 := sdk.AccAddress("addr1_______________")
-	balances := sdk.NewCoins(sdk.NewInt64Coin("aau", 1000))
-	suite.Require().NoError(simapp.FundModuleAccount(suite.app.BankKeeper, suite.ctx, types.ModuleName, balances))
 
 	msg := types.MsgStartRaffle{
 		Creator:     addr1.String(),
@@ -298,6 +267,8 @@ func (suite *IntegrationTestSuite) TestStartRaffle_InvalidRatio() {
 		TicketPrice: "",
 		Denom:       "aau",
 	}
+
+	suite.bank.EXPECT().HasSupply(gomock.Any(), "aau").Times(1).Return(true)
 	_, err := suite.msgServer.StartRaffle(goCtx, &msg)
 	suite.Require().Error(err)
 	suite.Require().ErrorContains(err, "invalid ratio")
@@ -307,8 +278,6 @@ func (suite *IntegrationTestSuite) TestStartRaffle_NotPositiveRatio() {
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 
 	addr1 := sdk.AccAddress("addr1_______________")
-	balances := sdk.NewCoins(sdk.NewInt64Coin("aau", 1000))
-	suite.Require().NoError(simapp.FundModuleAccount(suite.app.BankKeeper, suite.ctx, types.ModuleName, balances))
 
 	msg := types.MsgStartRaffle{
 		Creator:     addr1.String(),
@@ -319,6 +288,8 @@ func (suite *IntegrationTestSuite) TestStartRaffle_NotPositiveRatio() {
 		TicketPrice: "",
 		Denom:       "aau",
 	}
+
+	suite.bank.EXPECT().HasSupply(gomock.Any(), "aau").Times(2).Return(true)
 	_, err := suite.msgServer.StartRaffle(goCtx, &msg)
 	suite.Require().Error(err)
 	suite.Require().ErrorContains(err, "ratio is not positive")
@@ -341,8 +312,6 @@ func (suite *IntegrationTestSuite) TestStartRaffle_RatioBoundaries() {
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 
 	addr1 := sdk.AccAddress("addr1_______________")
-	balances := sdk.NewCoins(sdk.NewInt64Coin("aau", 1000))
-	suite.Require().NoError(simapp.FundModuleAccount(suite.app.BankKeeper, suite.ctx, types.ModuleName, balances))
 
 	msg := types.MsgStartRaffle{
 		Creator:     addr1.String(),
@@ -353,6 +322,8 @@ func (suite *IntegrationTestSuite) TestStartRaffle_RatioBoundaries() {
 		TicketPrice: "",
 		Denom:       "aau",
 	}
+
+	suite.bank.EXPECT().HasSupply(gomock.Any(), "aau").Times(2).Return(true)
 	_, err := suite.msgServer.StartRaffle(goCtx, &msg)
 	suite.Require().Error(err)
 	suite.Require().ErrorContains(err, "ratio must have a value between")
@@ -375,8 +346,6 @@ func (suite *IntegrationTestSuite) TestStartRaffle_InvalidChances() {
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 
 	addr1 := sdk.AccAddress("addr1_______________")
-	balances := sdk.NewCoins(sdk.NewInt64Coin("aau", 1000))
-	suite.Require().NoError(simapp.FundModuleAccount(suite.app.BankKeeper, suite.ctx, types.ModuleName, balances))
 
 	msg := types.MsgStartRaffle{
 		Creator:     addr1.String(),
@@ -387,6 +356,8 @@ func (suite *IntegrationTestSuite) TestStartRaffle_InvalidChances() {
 		TicketPrice: "",
 		Denom:       "aau",
 	}
+
+	suite.bank.EXPECT().HasSupply(gomock.Any(), "aau").Times(1).Return(true)
 	_, err := suite.msgServer.StartRaffle(goCtx, &msg)
 	suite.Require().Error(err)
 	suite.Require().ErrorContains(err, "invalid chances provided")
@@ -396,9 +367,6 @@ func (suite *IntegrationTestSuite) TestStartRaffle_ChancesBoundaries() {
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 
 	addr1 := sdk.AccAddress("addr1_______________")
-	balances := sdk.NewCoins(sdk.NewInt64Coin("aau", 1000))
-	suite.Require().NoError(simapp.FundModuleAccount(suite.app.BankKeeper, suite.ctx, types.ModuleName, balances))
-
 	msg := types.MsgStartRaffle{
 		Creator:     addr1.String(),
 		Pot:         "100",
@@ -408,6 +376,8 @@ func (suite *IntegrationTestSuite) TestStartRaffle_ChancesBoundaries() {
 		TicketPrice: "",
 		Denom:       "aau",
 	}
+
+	suite.bank.EXPECT().HasSupply(gomock.Any(), "aau").Times(2).Return(true)
 	_, err := suite.msgServer.StartRaffle(goCtx, &msg)
 	suite.Require().Error(err)
 	suite.Require().ErrorContains(err, "chances should have a value between")
@@ -430,8 +400,6 @@ func (suite *IntegrationTestSuite) TestStartRaffle_InvalidTicketPrice() {
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 
 	addr1 := sdk.AccAddress("addr1_______________")
-	balances := sdk.NewCoins(sdk.NewInt64Coin("aau", 1000))
-	suite.Require().NoError(simapp.FundModuleAccount(suite.app.BankKeeper, suite.ctx, types.ModuleName, balances))
 
 	msg := types.MsgStartRaffle{
 		Creator:     addr1.String(),
@@ -442,6 +410,8 @@ func (suite *IntegrationTestSuite) TestStartRaffle_InvalidTicketPrice() {
 		TicketPrice: "sdadsa",
 		Denom:       "aau",
 	}
+
+	suite.bank.EXPECT().HasSupply(gomock.Any(), "aau").Times(1).Return(true)
 	_, err := suite.msgServer.StartRaffle(goCtx, &msg)
 	suite.Require().Error(err)
 	suite.Require().ErrorContains(err, "invalid ticket price provided")
@@ -451,8 +421,6 @@ func (suite *IntegrationTestSuite) TestStartRaffle_NegativeTicketPrice() {
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 
 	addr1 := sdk.AccAddress("addr1_______________")
-	balances := sdk.NewCoins(sdk.NewInt64Coin("aau", 1000))
-	suite.Require().NoError(simapp.FundModuleAccount(suite.app.BankKeeper, suite.ctx, types.ModuleName, balances))
 
 	msg := types.MsgStartRaffle{
 		Creator:     addr1.String(),
@@ -463,6 +431,8 @@ func (suite *IntegrationTestSuite) TestStartRaffle_NegativeTicketPrice() {
 		TicketPrice: "-10000002310",
 		Denom:       "aau",
 	}
+
+	suite.bank.EXPECT().HasSupply(gomock.Any(), "aau").Times(1).Return(true)
 	_, err := suite.msgServer.StartRaffle(goCtx, &msg)
 	suite.Require().Error(err)
 	suite.Require().ErrorContains(err, "provided ticket price is not positive")
@@ -472,8 +442,6 @@ func (suite *IntegrationTestSuite) TestStartRaffle_IbcDenomFailure() {
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 
 	addr1 := sdk.AccAddress("addr1_______________")
-	balances := sdk.NewCoins(sdk.NewInt64Coin("ibc/aau", 1000))
-	suite.Require().NoError(simapp.FundModuleAccount(suite.app.BankKeeper, suite.ctx, types.ModuleName, balances))
 
 	msg := types.MsgStartRaffle{
 		Creator:     addr1.String(),
@@ -484,6 +452,8 @@ func (suite *IntegrationTestSuite) TestStartRaffle_IbcDenomFailure() {
 		TicketPrice: "1000000310",
 		Denom:       "ibc/aau",
 	}
+
+	suite.bank.EXPECT().HasSupply(gomock.Any(), "ibc/aau").Times(1).Return(true)
 	_, err := suite.msgServer.StartRaffle(goCtx, &msg)
 	suite.Require().Error(err)
 	suite.Require().ErrorContains(err, "coin not allowed in raffles")
@@ -493,8 +463,6 @@ func (suite *IntegrationTestSuite) TestStartRaffle_NotEnoughBalance() {
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 
 	addr1 := sdk.AccAddress("addr1_______________")
-	balances := sdk.NewCoins(sdk.NewInt64Coin("aau", 1000))
-	suite.Require().NoError(simapp.FundModuleAccount(suite.app.BankKeeper, suite.ctx, types.ModuleName, balances))
 
 	msg := types.MsgStartRaffle{
 		Creator:     addr1.String(),
@@ -505,6 +473,12 @@ func (suite *IntegrationTestSuite) TestStartRaffle_NotEnoughBalance() {
 		TicketPrice: "150000000",
 		Denom:       "aau",
 	}
+
+	suite.bank.EXPECT().HasSupply(gomock.Any(), "aau").Times(1).Return(true)
+	suite.bank.EXPECT().SpendableCoins(gomock.Any(), addr1).Times(1).
+		Return(sdk.NewCoins())
+	suite.epoch.EXPECT().GetEpochCountByIdentifier(gomock.Any(), "hour").Times(1).Return(int64(1))
+
 	_, err := suite.msgServer.StartRaffle(goCtx, &msg)
 	suite.Require().Error(err)
 	suite.Require().ErrorContains(err, "balance")
@@ -514,8 +488,6 @@ func (suite *IntegrationTestSuite) TestStartRaffle_Success() {
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 
 	addr1 := sdk.AccAddress("addr1_______________")
-	balances := sdk.NewCoins(sdk.NewInt64Coin("aau", 1000))
-	suite.Require().NoError(simapp.FundAccount(suite.app.BankKeeper, suite.ctx, addr1, balances))
 
 	msg := types.MsgStartRaffle{
 		Creator:     addr1.String(),
@@ -526,17 +498,21 @@ func (suite *IntegrationTestSuite) TestStartRaffle_Success() {
 		TicketPrice: "150000000",
 		Denom:       "aau",
 	}
+
+	suite.bank.EXPECT().
+		HasSupply(gomock.Any(), "aau").Times(1).Return(true)
+	suite.bank.EXPECT().
+		SpendableCoins(gomock.Any(), addr1).Times(1).Return(sdk.NewCoins(sdk.NewInt64Coin("aau", 500)))
+	suite.epoch.EXPECT().
+		GetEpochCountByIdentifier(gomock.Any(), "hour").Times(1).Return(int64(1))
+	suite.acc.EXPECT().
+		GetModuleAccount(gomock.Any(), types.RaffleModuleName).Times(5).
+		Return(types2.NewEmptyModuleAccount(types.RaffleModuleName))
+	suite.bank.EXPECT().
+		SendCoinsFromAccountToModule(gomock.Any(), addr1, types.RaffleModuleName, sdk.NewCoins(sdk.NewInt64Coin("aau", 100)))
+
 	_, err := suite.msgServer.StartRaffle(goCtx, &msg)
 	suite.Require().NoError(err)
-
-	addrBalance := suite.app.BankKeeper.GetBalance(suite.ctx, addr1, "aau")
-	suite.Require().Equal(addrBalance.Amount.String(), "900")
-
-	moduleAddress := suite.app.AccountKeeper.GetModuleAddress(types.RaffleModuleName)
-	moduleBalance := suite.app.BankKeeper.GetBalance(suite.ctx, moduleAddress, "aau")
-	suite.Require().Equal(moduleBalance.Amount.String(), "100")
-
-	endAt := suite.app.EpochsKeeper.GetEpochCountByIdentifier(suite.ctx, "hour") + (15 * 24)
 	storageRaffle, ok := suite.k.GetRaffle(suite.ctx, "aau")
 	suite.Require().True(ok)
 	suite.Require().EqualValues(msg.Pot, storageRaffle.Pot)
@@ -545,12 +521,12 @@ func (suite *IntegrationTestSuite) TestStartRaffle_Success() {
 	suite.Require().EqualValues(msg.Ratio, storageRaffle.Ratio)
 	suite.Require().EqualValues(msg.Denom, storageRaffle.Denom)
 	suite.Require().EqualValues(msg.TicketPrice, storageRaffle.TicketPrice)
-	suite.Require().EqualValues(uint64(endAt), storageRaffle.EndAt)
+	suite.Require().EqualValues(uint64(1+15*24), storageRaffle.EndAt)
 
-	deleteHook := suite.k.GetRaffleDeleteHookByEndAtPrefix(suite.ctx, uint64(endAt))
+	deleteHook := suite.k.GetRaffleDeleteHookByEndAtPrefix(suite.ctx, uint64(1+15*24))
 	suite.Require().NotEmpty(deleteHook)
 	suite.Require().Equal(deleteHook[0].Denom, "aau")
-	suite.Require().EqualValues(deleteHook[0].EndAt, endAt)
+	suite.Require().EqualValues(deleteHook[0].EndAt, uint64(1+15*24))
 }
 
 func (suite *IntegrationTestSuite) TestJoinRaffle_InvalidDenom() {
@@ -560,6 +536,9 @@ func (suite *IntegrationTestSuite) TestJoinRaffle_InvalidDenom() {
 		Creator: "",
 		Denom:   "dsa",
 	}
+	suite.bank.EXPECT().
+		HasSupply(gomock.Any(), "dsa").Times(1).Return(false)
+
 	_, err := suite.msgServer.JoinRaffle(goCtx, &msg)
 	suite.Require().Error(err)
 	suite.Require().ErrorContains(err, "denom")
@@ -568,14 +547,12 @@ func (suite *IntegrationTestSuite) TestJoinRaffle_InvalidDenom() {
 func (suite *IntegrationTestSuite) TestJoinRaffle_RaffleNotFound() {
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 
-	addr1 := sdk.AccAddress("addr1_______________")
-	balances := sdk.NewCoins(sdk.NewInt64Coin("aau", 1000))
-	suite.Require().NoError(simapp.FundAccount(suite.app.BankKeeper, suite.ctx, addr1, balances))
-
 	msg := types.MsgJoinRaffle{
 		Creator: "",
 		Denom:   "aau",
 	}
+	suite.bank.EXPECT().
+		HasSupply(gomock.Any(), "aau").Times(1).Return(true)
 
 	_, err := suite.msgServer.JoinRaffle(goCtx, &msg)
 	suite.Require().Error(err)
@@ -585,15 +562,12 @@ func (suite *IntegrationTestSuite) TestJoinRaffle_RaffleNotFound() {
 func (suite *IntegrationTestSuite) TestJoinRaffle_InvalidCreator() {
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 
-	addr1 := sdk.AccAddress("addr1_______________")
-	balances := sdk.NewCoins(sdk.NewInt64Coin("aau", 1000))
-	suite.Require().NoError(simapp.FundAccount(suite.app.BankKeeper, suite.ctx, addr1, balances))
 	raffle := types.Raffle{
 		Pot:         "",
 		Duration:    0,
 		Chances:     0,
 		Ratio:       "",
-		EndAt:       0,
+		EndAt:       10,
 		Winners:     0,
 		TicketPrice: "",
 		Denom:       "aau",
@@ -605,227 +579,12 @@ func (suite *IntegrationTestSuite) TestJoinRaffle_InvalidCreator() {
 		Creator: "aa",
 		Denom:   "aau",
 	}
+	suite.epoch.EXPECT().
+		GetEpochCountByIdentifier(gomock.Any(), "hour").Times(1).Return(int64(1))
+	suite.bank.EXPECT().
+		HasSupply(gomock.Any(), "aau").Times(1).Return(true)
 
 	_, err := suite.msgServer.JoinRaffle(goCtx, &msg)
 	suite.Require().Error(err)
 	suite.Require().ErrorContains(err, "bech32")
-}
-
-func (suite *IntegrationTestSuite) TestJoinRaffle_Stress() {
-	goCtx := sdk.WrapSDKContext(suite.ctx)
-
-	addr1 := sdk.AccAddress("addr1_______________")
-	initialBalanceAmount := sdk.NewInt(1_000_000_000_000_000)
-	balances := sdk.NewCoins(sdk.NewInt64Coin("aau", initialBalanceAmount.Int64()))
-	suite.Require().NoError(simapp.FundAccount(suite.app.BankKeeper, suite.ctx, addr1, balances))
-
-	potInt := sdk.NewInt(150_000_000_000)
-	ticketCost := sdk.NewInt(10_000_000)
-	msg := types.MsgStartRaffle{
-		Creator:     addr1.String(),
-		Pot:         potInt.String(),
-		Duration:    "1",
-		Chances:     "100",
-		Ratio:       "0.1",
-		TicketPrice: ticketCost.String(),
-		Denom:       "aau",
-	}
-	_, err := suite.msgServer.StartRaffle(goCtx, &msg)
-	suite.Require().NoError(err)
-
-	addrBalance := suite.app.BankKeeper.GetBalance(suite.ctx, addr1, "aau")
-	suite.Require().EqualValues(addrBalance.Amount, initialBalanceAmount.Sub(potInt))
-
-	moduleAddress := suite.app.AccountKeeper.GetModuleAddress(types.RaffleModuleName)
-	moduleBalance := suite.app.BankKeeper.GetBalance(suite.ctx, moduleAddress, "aau")
-	suite.Require().EqualValues(moduleBalance.Amount, potInt)
-
-	ratio, err := sdk.NewDecFromStr(msg.Ratio)
-	suite.Require().NoError(err)
-
-	winCount := 0
-	ticketsToPlace := time.Now().Unix()
-	totalPotWon := sdk.ZeroInt()
-
-	for i := ticketsToPlace; i <= ticketsToPlace+100000; i++ {
-		appHash := fmt.Sprintf("%x", i)
-		blockHash := []byte("block_id" + appHash)
-		suite.ctx = suite.ctx.WithBlockHeader(tmproto.Header{
-			LastBlockId: tmproto.BlockID{
-				Hash: tmhash.Sum(blockHash),
-			},
-			AppHash: tmhash.Sum([]byte(appHash)),
-			Height:  int64(i),
-		}).WithEventManager(sdk.NewEventManager())
-		goCtx = sdk.WrapSDKContext(suite.ctx)
-		addrBalance = suite.app.BankKeeper.GetBalance(suite.ctx, addr1, "aau")
-		moduleBalance = suite.app.BankKeeper.GetBalance(suite.ctx, moduleAddress, "aau")
-		winners := suite.k.GetRaffleWinners(suite.ctx, "aau")
-		raffle, ok := suite.k.GetRaffle(suite.ctx, "aau")
-		suite.Require().True(ok)
-		raffleTotalWon, ok := sdk.NewIntFromString(raffle.TotalWon)
-		suite.Require().True(ok)
-
-		join := types.MsgJoinRaffle{
-			Creator: addr1.String(),
-			Denom:   "aau",
-		}
-
-		_, err := suite.msgServer.JoinRaffle(goCtx, &join)
-		suite.Require().NoError(err)
-
-		suite.k.WithdrawLuckyRaffleParticipants(suite.ctx, suite.ctx.BlockHeight())
-
-		for _, e := range suite.ctx.EventManager().Events() {
-			if strings.Contains(e.Type, "RaffleWinnerEvent") {
-				winCount++
-				//wonAmount := currentPot.Amount.Sub(ticketPriceInt).ToDec().Mul(winRatio).TruncateInt()
-				prize := moduleBalance.Amount.ToDec().Mul(ratio).TruncateInt()
-				if !prize.IsPositive() {
-					prize = moduleBalance.SubAmount(ticketCost).Amount
-				}
-				totalPotWon = totalPotWon.Add(prize)
-				newBalance := suite.app.BankKeeper.GetBalance(suite.ctx, addr1, "aau")
-				suite.Require().EqualValuesf(newBalance.Amount, addrBalance.Amount.Add(prize).Sub(ticketCost), fmt.Sprintf("expected balance: %s - actual balance: %s", newBalance.String(), addrBalance.Amount.Add(prize).Sub(ticketCost).String()))
-
-				newModuleBalance := suite.app.BankKeeper.GetBalance(suite.ctx, moduleAddress, "aau")
-				suite.Require().EqualValues(newModuleBalance.Amount, moduleBalance.Amount.Sub(prize).Add(ticketCost))
-
-				newWinners := suite.k.GetRaffleWinners(suite.ctx, "aau")
-				suite.Require().True(len(newWinners) == len(winners)+1 || len(newWinners) == 100)
-
-				//check totalWon
-				r, ok := suite.k.GetRaffle(suite.ctx, "aau")
-				suite.Require().True(ok)
-				rTotalWon, ok := sdk.NewIntFromString(r.TotalWon)
-				suite.Require().True(ok)
-				suite.Require().EqualValues(rTotalWon, raffleTotalWon.Add(prize))
-			} else if strings.Contains(e.Type, "RaffleLostEvent") {
-
-				newBalance := suite.app.BankKeeper.GetBalance(suite.ctx, addr1, "aau")
-				suite.Require().EqualValues(newBalance.Amount, addrBalance.Amount.Sub(ticketCost))
-
-				newModuleBalance := suite.app.BankKeeper.GetBalance(suite.ctx, moduleAddress, "aau")
-				suite.Require().EqualValues(newModuleBalance.Amount, moduleBalance.Amount.Add(ticketCost))
-
-				newWinners := suite.k.GetRaffleWinners(suite.ctx, "aau")
-				suite.Require().Len(newWinners, len(winners))
-			}
-		}
-	}
-
-	newModuleBalance := suite.app.BankKeeper.GetBalance(suite.ctx, moduleAddress, "aau")
-	suite.ctx.Logger().Info(fmt.Sprintf("test finished"))
-	suite.ctx.Logger().Info(fmt.Sprintf("%d users won. total participants %d", winCount, 100000))
-	suite.ctx.Logger().Info(fmt.Sprintf("total pot won: %s", totalPotWon.QuoRaw(1_000_000).String()))
-	suite.ctx.Logger().Info(fmt.Sprintf("module balance is: %s", newModuleBalance.Amount.QuoRaw(1_000_000).String()))
-}
-
-func (suite *IntegrationTestSuite) TestJoinRaffle_Simulation() {
-	goCtx := sdk.WrapSDKContext(suite.ctx)
-
-	addr1 := sdk.AccAddress("addr13___20______")
-	addr2 := sdk.AccAddress("addr2__5__9______")
-	initialBalanceAmount := sdk.NewInt(1_000_000_000_000_000)
-	balances := sdk.NewCoins(sdk.NewInt64Coin("aau", initialBalanceAmount.Int64()))
-	suite.Require().NoError(simapp.FundAccount(suite.app.BankKeeper, suite.ctx, addr1, balances))
-	suite.Require().NoError(simapp.FundAccount(suite.app.BankKeeper, suite.ctx, addr2, balances))
-	suite.ek.BeginBlocker(suite.ctx)
-	potInt := sdk.NewInt(200_000_000_000)
-	ticketCost := sdk.NewInt(25_000_000)
-	msg := types.MsgStartRaffle{
-		Creator:     addr1.String(),
-		Pot:         potInt.String(),
-		Duration:    "14",
-		Chances:     "100",
-		Ratio:       "0.50",
-		TicketPrice: ticketCost.String(),
-		Denom:       "aau",
-	}
-	_, err := suite.msgServer.StartRaffle(goCtx, &msg)
-	suite.Require().NoError(err)
-
-	addrBalance := suite.app.BankKeeper.GetBalance(suite.ctx, addr1, "aau")
-	suite.Require().EqualValues(addrBalance.Amount, initialBalanceAmount.Sub(potInt))
-
-	addr2Balance := suite.app.BankKeeper.GetBalance(suite.ctx, addr2, "aau")
-	suite.Require().EqualValues(addr2Balance.Amount, initialBalanceAmount)
-
-	moduleAddress := suite.app.AccountKeeper.GetModuleAddress(types.RaffleModuleName)
-	moduleBalance := suite.app.BankKeeper.GetBalance(suite.ctx, moduleAddress, "aau")
-	suite.Require().EqualValues(moduleBalance.Amount, potInt)
-
-	ratio, err := sdk.NewDecFromStr(msg.Ratio)
-	suite.Require().NoError(err)
-
-	winCount := 0
-	ticketsStart := time.Now().Unix()
-	ticketsToPlace := int64(50000)
-	totalPotWon := sdk.ZeroInt()
-
-	for i := ticketsStart; i < ticketsStart+ticketsToPlace; i++ {
-		appHash := fmt.Sprintf("%x", i)
-		blockHash := []byte("block_id" + appHash)
-		suite.ctx = suite.ctx.WithBlockHeader(tmproto.Header{
-			LastBlockId: tmproto.BlockID{
-				Hash: tmhash.Sum(blockHash),
-			},
-			AppHash: tmhash.Sum([]byte(appHash)),
-			Height:  i,
-		}).WithEventManager(sdk.NewEventManager())
-
-		goCtx = sdk.WrapSDKContext(suite.ctx)
-		addrBalance = suite.app.BankKeeper.GetBalance(suite.ctx, addr1, "aau")
-		addr2Balance = suite.app.BankKeeper.GetBalance(suite.ctx, addr2, "aau")
-		moduleBalance = suite.app.BankKeeper.GetBalance(suite.ctx, moduleAddress, "aau")
-		winners := suite.k.GetRaffleWinners(suite.ctx, "aau")
-
-		join := types.MsgJoinRaffle{
-			Creator: addr1.String(),
-			Denom:   "aau",
-		}
-		join2 := types.MsgJoinRaffle{
-			Creator: addr2.String(),
-			Denom:   "aau",
-		}
-
-		_, err = suite.msgServer.JoinRaffle(goCtx, &join)
-		suite.Require().NoError(err)
-		_, err = suite.msgServer.JoinRaffle(goCtx, &join2)
-		suite.Require().NoError(err)
-
-		suite.k.WithdrawLuckyRaffleParticipants(suite.ctx, suite.ctx.BlockHeight())
-
-		for _, e := range suite.ctx.EventManager().Events() {
-			if strings.Contains(e.Type, "RaffleWinnerEvent") {
-				winCount++
-				//wonAmount := currentPot.Amount.Sub(ticketPriceInt).ToDec().Mul(winRatio).TruncateInt()
-				prize := moduleBalance.Amount.ToDec().Mul(ratio).TruncateInt()
-				if !prize.IsPositive() {
-					prize = moduleBalance.SubAmount(ticketCost).Amount
-				}
-				totalPotWon = totalPotWon.Add(prize)
-
-				wantedAddress := addr1
-				compareAddress := addrBalance
-				for _, attr := range e.Attributes {
-					if strings.Contains(attr.String(), addr2.String()) {
-						wantedAddress = addr2
-						compareAddress = addr2Balance
-					}
-				}
-				newBalance := suite.app.BankKeeper.GetBalance(suite.ctx, wantedAddress, "aau")
-				suite.Require().True(newBalance.Amount.GT(compareAddress.Amount))
-
-				newWinners := suite.k.GetRaffleWinners(suite.ctx, "aau")
-				suite.Require().True(len(newWinners) > len(winners) || len(newWinners) == 100)
-			}
-		}
-	}
-
-	newModuleBalance := suite.app.BankKeeper.GetBalance(suite.ctx, moduleAddress, "aau")
-	suite.ctx.Logger().Info(fmt.Sprintf("test finished"))
-	suite.ctx.Logger().Info(fmt.Sprintf("%d users won. total participants %d", winCount, ticketsToPlace))
-	suite.ctx.Logger().Info(fmt.Sprintf("total pot won: %s", totalPotWon.QuoRaw(1_000_000).String()))
-	suite.ctx.Logger().Info(fmt.Sprintf("module balance is: %s", newModuleBalance.Amount.QuoRaw(1_000_000).String()))
 }

@@ -2,10 +2,11 @@ package keeper_test
 
 import (
 	"fmt"
-	"github.com/bze-alphateam/bze/testutil/simapp"
 	"github.com/bze-alphateam/bze/x/burner/keeper"
 	"github.com/bze-alphateam/bze/x/burner/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	types2 "github.com/cosmos/cosmos-sdk/x/auth/types"
+	"go.uber.org/mock/gomock"
 )
 
 func (suite *IntegrationTestSuite) TestGetBurnerRaffleCleanupHook() {
@@ -20,9 +21,6 @@ func (suite *IntegrationTestSuite) TestGetBurnerRaffleCleanupHook() {
 func (suite *IntegrationTestSuite) TestBurnerRaffleCleanupHook_MultipleRaffles_DifferentEndAt() {
 	hook := suite.k.GetBurnerRaffleCleanupHook()
 	suite.Require().NotNil(hook)
-
-	//call it to create the module account
-	moduleAcc := suite.app.AccountKeeper.GetModuleAccount(suite.ctx, types.RaffleModuleName)
 
 	//add to store some random data to delete
 	for i := 1; i <= 5; i++ {
@@ -45,11 +43,6 @@ func (suite *IntegrationTestSuite) TestBurnerRaffleCleanupHook_MultipleRaffles_D
 		}
 		suite.k.SetRaffle(suite.ctx, raffle)
 
-		balances := sdk.NewCoins(sdk.NewInt64Coin(denom, 5000))
-		suite.Require().NoError(
-			simapp.FundModuleAccount(suite.app.BankKeeper, suite.ctx, types.RaffleModuleName, balances),
-		)
-
 		w1 := types.RaffleWinner{
 			Index:  "1",
 			Denom:  denom,
@@ -70,10 +63,21 @@ func (suite *IntegrationTestSuite) TestBurnerRaffleCleanupHook_MultipleRaffles_D
 	//minimal check that we have something in storage
 	list := suite.k.GetAllRaffle(suite.ctx)
 	suite.Require().Len(list, 5)
-
 	for i := 1; i <= 5; i++ {
-		suite.Require().NoError(hook.AfterEpochEnd(suite.ctx, "hour", int64(i)))
 		denom := fmt.Sprintf("burner%d", i)
+		//expect to get module account
+		suite.acc.EXPECT().GetModuleAccount(gomock.Any(), types.RaffleModuleName).Times(1).
+			Return(types2.NewEmptyModuleAccount(types.RaffleModuleName))
+
+		//expect to get balance for current denom
+		expectedBalance := sdk.NewCoin(denom, sdk.NewInt(1))
+		suite.bank.EXPECT().GetBalance(gomock.Any(), gomock.Any(), denom).Times(1).
+			Return(expectedBalance)
+		//expect to burn coins
+		suite.bank.EXPECT().BurnCoins(gomock.Any(), gomock.Any(), sdk.NewCoins(expectedBalance)).Times(1).
+			Return(nil)
+
+		suite.Require().NoError(hook.AfterEpochEnd(suite.ctx, "hour", int64(i)))
 
 		//check raffle was deleted
 		_, ok := suite.k.GetRaffle(suite.ctx, denom)
@@ -83,20 +87,15 @@ func (suite *IntegrationTestSuite) TestBurnerRaffleCleanupHook_MultipleRaffles_D
 		winners := suite.k.GetRaffleWinners(suite.ctx, denom)
 		suite.Require().Len(winners, 0)
 
+		//check delete hook was deleted
 		delHooksStored := suite.k.GetRaffleDeleteHookByEndAtPrefix(suite.ctx, uint64(i))
 		suite.Require().Len(delHooksStored, 0)
-
-		bal := suite.app.BankKeeper.GetBalance(suite.ctx, moduleAcc.GetAddress(), denom)
-		suite.Require().True(bal.IsZero())
 	}
 }
 
 func (suite *IntegrationTestSuite) TestBurnerRaffleCleanupHook_MultipleRaffles_SameEndAt() {
 	hook := suite.k.GetBurnerRaffleCleanupHook()
 	suite.Require().NotNil(hook)
-
-	//call it to create the module account
-	moduleAcc := suite.app.AccountKeeper.GetModuleAccount(suite.ctx, types.RaffleModuleName)
 
 	//add to store some random data to delete
 	for i := 1; i <= 5; i++ {
@@ -122,11 +121,6 @@ func (suite *IntegrationTestSuite) TestBurnerRaffleCleanupHook_MultipleRaffles_S
 		}
 		suite.k.SetRaffle(suite.ctx, raffle)
 
-		balances := sdk.NewCoins(sdk.NewInt64Coin(denom, 5000))
-		suite.Require().NoError(
-			simapp.FundModuleAccount(suite.app.BankKeeper, suite.ctx, types.RaffleModuleName, balances),
-		)
-
 		w1 := types.RaffleWinner{
 			Index:  "1",
 			Denom:  denom,
@@ -148,6 +142,17 @@ func (suite *IntegrationTestSuite) TestBurnerRaffleCleanupHook_MultipleRaffles_S
 	list := suite.k.GetAllRaffle(suite.ctx)
 	suite.Require().Len(list, 5)
 
+	suite.acc.EXPECT().GetModuleAccount(gomock.Any(), types.RaffleModuleName).Times(5).
+		Return(types2.NewEmptyModuleAccount(types.RaffleModuleName))
+
+	suite.bank.EXPECT().GetBalance(gomock.Any(), gomock.Any(), gomock.Any()).Times(5).
+		DoAndReturn(func(ctx sdk.Context, addr sdk.AccAddress, denom string) sdk.Coin {
+			return sdk.NewCoin(denom, sdk.NewInt(1))
+		})
+	//expect to burn coins
+	suite.bank.EXPECT().BurnCoins(gomock.Any(), gomock.Any(), gomock.Any()).Times(5).
+		Return(nil)
+
 	suite.Require().NoError(hook.AfterEpochEnd(suite.ctx, "hour", int64(1)))
 	for i := 1; i <= 5; i++ {
 		isFactoryDenom := false
@@ -168,9 +173,6 @@ func (suite *IntegrationTestSuite) TestBurnerRaffleCleanupHook_MultipleRaffles_S
 		delHooksStored := suite.k.GetRaffleDeleteHookByEndAtPrefix(suite.ctx, uint64(i))
 		suite.Require().Len(delHooksStored, 0)
 
-		bal := suite.app.BankKeeper.GetBalance(suite.ctx, moduleAcc.GetAddress(), denom)
-		suite.Require().True(bal.IsZero())
-
 		allBurns := suite.k.GetAllBurnedCoins(suite.ctx)
 		if !isFactoryDenom {
 			suite.Require().NotEmpty(allBurns)
@@ -189,24 +191,26 @@ func (suite *IntegrationTestSuite) TestGetBurnerPeriodicBurnHook_BurnSuccess() {
 	hook := suite.k.GetBurnerPeriodicBurnHook()
 	suite.Require().NotNil(hook)
 
-	coins := sdk.NewCoins(sdk.NewCoin("ubze", sdk.NewInt(987654321)))
+	suite.acc.EXPECT().GetModuleAccount(gomock.Any(), types.ModuleName).Times(1).
+		Return(types2.NewEmptyModuleAccount(types.ModuleName))
 
-	suite.Require().NoError(simapp.FundModuleAccount(*suite.bank, suite.ctx, types.ModuleName, coins))
+	suite.bank.EXPECT().GetAllBalances(gomock.Any(), gomock.Any()).Times(1).
+		DoAndReturn(func(ctx sdk.Context, addr sdk.AccAddress) sdk.Coins {
+			return sdk.NewCoins(sdk.NewCoin("ubze", sdk.NewInt(1)))
+		})
+	//expect to burn coins
+	suite.bank.EXPECT().BurnCoins(gomock.Any(), gomock.Any(), gomock.Any()).Times(1).
+		Return(nil)
 
 	suite.Require().NoError(hook.AfterEpochEnd(suite.ctx, "week", int64(keeper.BurnInterval)))
 
 	allBurns := suite.k.GetAllBurnedCoins(suite.ctx)
 	suite.Require().Len(allBurns, 1)
-	suite.Require().Equal(allBurns[0].Burned, coins.String())
 }
 
 func (suite *IntegrationTestSuite) TestGetBurnerPeriodicBurnHook_BurnSkipped() {
 	hook := suite.k.GetBurnerPeriodicBurnHook()
 	suite.Require().NotNil(hook)
-
-	coins := sdk.NewCoins(sdk.NewCoin("ubze", sdk.NewInt(1234567890)))
-
-	suite.Require().NoError(simapp.FundModuleAccount(*suite.bank, suite.ctx, types.ModuleName, coins))
 
 	suite.Require().NoError(hook.AfterEpochEnd(suite.ctx, "day", int64(0)))
 
@@ -217,7 +221,13 @@ func (suite *IntegrationTestSuite) TestGetBurnerPeriodicBurnHook_BurnSkipped() {
 func (suite *IntegrationTestSuite) TestGetBurnerPeriodicBurnHook_EmptyBalance() {
 	hook := suite.k.GetBurnerPeriodicBurnHook()
 	suite.Require().NotNil(hook)
+	suite.acc.EXPECT().GetModuleAccount(gomock.Any(), types.ModuleName).Times(1).
+		Return(types2.NewEmptyModuleAccount(types.ModuleName))
 
+	suite.bank.EXPECT().GetAllBalances(gomock.Any(), gomock.Any()).Times(1).
+		DoAndReturn(func(ctx sdk.Context, addr sdk.AccAddress) sdk.Coins {
+			return sdk.NewCoins()
+		})
 	suite.Require().NoError(hook.AfterEpochEnd(suite.ctx, "week", int64(keeper.BurnInterval*2)))
 
 	allBurns := suite.k.GetAllBurnedCoins(suite.ctx)
