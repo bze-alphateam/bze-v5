@@ -17,7 +17,7 @@ import (
 	tmdb "github.com/tendermint/tm-db"
 )
 
-func RewardsKeeper(t testing.TB) (*keeper.Keeper, sdk.Context) {
+func RewardsKeeper(t testing.TB, bank types.BankKeeper, distr types.DistrKeeper, trading types.TradingKeeper, epochs types.EpochKeeper) (*keeper.Keeper, sdk.Context) {
 	storeKey := sdk.NewKVStoreKey(types.StoreKey)
 	memStoreKey := storetypes.NewMemoryStoreKey(types.MemStoreKey)
 
@@ -41,10 +41,10 @@ func RewardsKeeper(t testing.TB) (*keeper.Keeper, sdk.Context) {
 		storeKey,
 		memStoreKey,
 		paramsSubspace,
-		nil,
-		nil,
-		nil,
-		nil,
+		bank,
+		distr,
+		trading,
+		epochs,
 	)
 
 	ctx := sdk.NewContext(stateStore, tmproto.Header{}, false, log.NewNopLogger())

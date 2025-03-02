@@ -7,6 +7,7 @@ import (
 
 type DistrKeeper interface {
 	// Methods imported from distr should be defined here
+	FundCommunityPool(ctx sdk.Context, amount sdk.Coins, sender sdk.AccAddress) error
 }
 
 // AccountKeeper defines the expected account keeper used for simulations (noalias)

@@ -44,13 +44,18 @@ func (k msgServer) CreateTradingReward(goCtx context.Context, msg *types.MsgCrea
 		return nil, types.ErrRewardAlreadyExists
 	}
 
-	feeParam := k.GetParams(ctx).CreateTradingRewardFee
-	toCapture, err := k.getAmountToCapture(feeParam, tradingReward.PrizeDenom, tradingReward.PrizeAmount, int64(tradingReward.Slots))
+	toCapture, err := k.getAmountToCapture(tradingReward.PrizeDenom, tradingReward.PrizeAmount, int64(tradingReward.Slots))
 	if err != nil {
 		return nil, sdkerrors.Wrapf(err, "could not calculate amount needed to create the reward")
 	}
 
-	err = k.checkUserBalances(ctx, toCapture, acc)
+	fee := k.getRewardCreationFee(ctx, k.GetParams(ctx).CreateTradingRewardFee)
+	neededBalance := toCapture
+	if fee != nil {
+		neededBalance = neededBalance.Add(fee...)
+	}
+
+	err = k.checkUserBalances(ctx, neededBalance, acc)
 	if err != nil {
 		return nil, err
 	}
@@ -58,6 +63,13 @@ func (k msgServer) CreateTradingReward(goCtx context.Context, msg *types.MsgCrea
 	err = k.bankKeeper.SendCoinsFromAccountToModule(ctx, acc, types.ModuleName, toCapture)
 	if err != nil {
 		return nil, err
+	}
+
+	if fee != nil {
+		err = k.distrKeeper.FundCommunityPool(ctx, fee, acc)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	//add ID

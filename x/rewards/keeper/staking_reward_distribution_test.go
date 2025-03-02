@@ -33,9 +33,11 @@ func (suite *IntegrationTestSuite) TestDistributeAllStakingRewards() {
 
 		staked, ok := sdk.NewIntFromString(storage.StakedAmount)
 		suite.Require().True(ok)
+		stakedDec, err := math.LegacyNewDecFromStr(storage.StakedAmount)
+		suite.Require().NoError(err)
 
-		newDistribution := rewardAmt.Quo(staked.ToDec())
-		distributed, err := sdk.NewDecFromStr(initial.DistributedStake)
+		newDistribution := rewardAmt.Quo(stakedDec)
+		distributed, err := math.LegacyNewDecFromStr(initial.DistributedStake)
 		suite.Require().NoError(err)
 
 		distributed = distributed.Add(newDistribution)

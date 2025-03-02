@@ -1,10 +1,10 @@
 package keeper_test
 
 import (
-	"github.com/bze-alphateam/bze/testutil/simapp"
 	"github.com/bze-alphateam/bze/x/rewards/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
+	"go.uber.org/mock/gomock"
 )
 
 func (suite *IntegrationTestSuite) TestCreateStakingReward_InvalidRequest() {
@@ -43,8 +43,6 @@ func (suite *IntegrationTestSuite) TestCreateStakingReward_InvalidStakingReward(
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 
 	addr1 := sdk.AccAddress("addr1_______________")
-	acc1 := suite.app.AccountKeeper.NewAccountWithAddress(suite.ctx, addr1)
-	suite.app.AccountKeeper.SetAccount(suite.ctx, acc1)
 
 	tests := []struct {
 		name string
@@ -188,8 +186,6 @@ func (suite *IntegrationTestSuite) TestUpdateStakingReward_InvalidStakingReward(
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 
 	addr1 := sdk.AccAddress("addr1_______________")
-	acc1 := suite.app.AccountKeeper.NewAccountWithAddress(suite.ctx, addr1)
-	suite.app.AccountKeeper.SetAccount(suite.ctx, acc1)
 
 	tests := []struct {
 		name             string
@@ -239,6 +235,10 @@ func (suite *IntegrationTestSuite) TestUpdateStakingReward_InvalidStakingReward(
 	suite.k.SetStakingReward(suite.ctx, stakingReward)
 
 	for _, tt := range tests {
+		if tt.addStakingReward {
+			suite.bankMock.EXPECT().SpendableCoins(gomock.Any(), addr1).Return(sdk.NewCoins())
+		}
+
 		_, err := suite.msgServer.UpdateStakingReward(goCtx, &tt.msg)
 		suite.Require().NotNil(err)
 	}
@@ -247,19 +247,18 @@ func (suite *IntegrationTestSuite) TestUpdateStakingReward_InvalidStakingReward(
 func (suite *IntegrationTestSuite) TestCreateStakingReward_MissingSupply() {
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 	addr1 := sdk.AccAddress("addr1_______________")
-	acc1 := suite.app.AccountKeeper.NewAccountWithAddress(suite.ctx, addr1)
-	suite.app.AccountKeeper.SetAccount(suite.ctx, acc1)
 
 	msg := types.MsgCreateStakingReward{
 		Creator:      addr1.String(),
 		PrizeAmount:  "10",
-		PrizeDenom:   "ubze",
-		StakingDenom: "ubze",
+		PrizeDenom:   denomBze,
+		StakingDenom: denomBze,
 		MinStake:     "10",
 		Duration:     "100",
 		Lock:         "1",
 	}
 
+	suite.bankMock.EXPECT().HasSupply(gomock.Any(), denomBze).Times(1).Return(false)
 	_, err := suite.msgServer.CreateStakingReward(goCtx, &msg)
 	suite.Require().NotNil(err)
 }
@@ -268,26 +267,19 @@ func (suite *IntegrationTestSuite) TestCreateStakingReward_NotEnoughBalance() {
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 
 	addr1 := sdk.AccAddress("addr1_______________")
-	acc1 := suite.app.AccountKeeper.NewAccountWithAddress(suite.ctx, addr1)
-	suite.app.AccountKeeper.SetAccount(suite.ctx, acc1)
-
-	//initial balances need to be 0
-	initialUserBalances := suite.app.BankKeeper.GetAllBalances(suite.ctx, addr1)
-	suite.Require().True(initialUserBalances.IsZero())
-
-	balances := sdk.NewCoins(sdk.NewInt64Coin("ubze", 1))
-	suite.Require().NoError(simapp.FundAccount(suite.app.BankKeeper, suite.ctx, addr1, balances))
 
 	msg := types.MsgCreateStakingReward{
 		Creator:      addr1.String(),
 		PrizeAmount:  "10",
-		PrizeDenom:   "ubze",
-		StakingDenom: "ubze",
+		PrizeDenom:   denomBze,
+		StakingDenom: denomBze,
 		MinStake:     "10",
 		Duration:     "100",
 		Lock:         "1",
 	}
 
+	suite.bankMock.EXPECT().HasSupply(gomock.Any(), denomBze).Times(2).Return(true)
+	suite.bankMock.EXPECT().SpendableCoins(gomock.Any(), addr1).Times(1).Return(sdk.NewCoins(sdk.NewInt64Coin(denomBze, 10*99)))
 	_, err := suite.msgServer.CreateStakingReward(goCtx, &msg)
 	suite.Require().Error(err)
 }
@@ -296,25 +288,26 @@ func (suite *IntegrationTestSuite) TestCreateStakingReward_Success() {
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 
 	addr1 := sdk.AccAddress("addr1_______________")
-	acc1 := suite.app.AccountKeeper.NewAccountWithAddress(suite.ctx, addr1)
-	suite.app.AccountKeeper.SetAccount(suite.ctx, acc1)
-
-	//initial balances need to be 0
-	initialUserBalances := suite.app.BankKeeper.GetAllBalances(suite.ctx, addr1)
-	suite.Require().True(initialUserBalances.IsZero())
-
-	balances := sdk.NewCoins(sdk.NewInt64Coin("ubze", 40_000_000_000))
-	suite.Require().NoError(simapp.FundAccount(suite.app.BankKeeper, suite.ctx, addr1, balances))
 
 	msg := types.MsgCreateStakingReward{
 		Creator:      addr1.String(),
 		PrizeAmount:  "10",
-		PrizeDenom:   "ubze",
-		StakingDenom: "ubze",
+		PrizeDenom:   denomBze,
+		StakingDenom: denomBze,
 		MinStake:     "10",
 		Duration:     "100",
 		Lock:         "1",
 	}
+
+	suite.bankMock.EXPECT().HasSupply(gomock.Any(), denomBze).Times(2).Return(true)
+	//user has balance for prize and for staking reward creation fee too
+	suite.bankMock.EXPECT().SpendableCoins(gomock.Any(), addr1).Times(1).Return(sdk.NewCoins(sdk.NewInt64Coin(denomBze, 30_000_000_000_000)))
+	//expect user to pay for the rewards (duration * prize amount)
+	suite.bankMock.EXPECT().
+		SendCoinsFromAccountToModule(gomock.Any(), addr1, types.ModuleName, sdk.NewCoins(sdk.NewInt64Coin(denomBze, 1000))).
+		Times(1)
+	//expect user to pay for staking reward creation
+	suite.distrMock.EXPECT().FundCommunityPool(goCtx, sdk.NewCoins(sdk.NewInt64Coin(denomBze, 25000_000000)), addr1).Times(1).Return(nil)
 
 	res, err := suite.msgServer.CreateStakingReward(goCtx, &msg)
 	suite.Require().NoError(err)
@@ -329,31 +322,18 @@ func (suite *IntegrationTestSuite) TestCreateStakingReward_Success() {
 	suite.Require().EqualValues(100, storeStakingReward.Duration)
 	suite.Require().EqualValues(1, storeStakingReward.Lock)
 	suite.Require().EqualValues(0, storeStakingReward.Payouts)
-
-	expectedRemainingBalance := sdk.NewCoins(sdk.NewInt64Coin("ubze", 14999999000))
-	actualRemainingBalance := suite.app.BankKeeper.GetAllBalances(suite.ctx, addr1)
-	suite.Require().EqualValues(expectedRemainingBalance, actualRemainingBalance)
 }
 
 func (suite *IntegrationTestSuite) TestUpdateStakingReward_Success() {
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 
 	addr1 := sdk.AccAddress("addr1_______________")
-	acc1 := suite.app.AccountKeeper.NewAccountWithAddress(suite.ctx, addr1)
-	suite.app.AccountKeeper.SetAccount(suite.ctx, acc1)
-
-	//initial balances need to be 0
-	initialUserBalances := suite.app.BankKeeper.GetAllBalances(suite.ctx, addr1)
-	suite.Require().True(initialUserBalances.IsZero())
-
-	balances := sdk.NewCoins(sdk.NewInt64Coin("ubze", 20000000000))
-	suite.Require().NoError(simapp.FundAccount(suite.app.BankKeeper, suite.ctx, addr1, balances))
 
 	stakingReward := types.StakingReward{
 		RewardId:     "001",
 		PrizeAmount:  "10",
-		PrizeDenom:   "ubze",
-		StakingDenom: "ubze",
+		PrizeDenom:   denomBze,
+		StakingDenom: denomBze,
 		MinStake:     10,
 		Duration:     100,
 		Lock:         1,
@@ -365,6 +345,12 @@ func (suite *IntegrationTestSuite) TestUpdateStakingReward_Success() {
 		Duration: "200",
 		RewardId: "001",
 	}
+
+	suite.bankMock.EXPECT().SpendableCoins(gomock.Any(), addr1).Times(1).Return(sdk.NewCoins(sdk.NewInt64Coin(denomBze, 3000)))
+	//expect user to pay for the rewards (duration * prize amount)
+	suite.bankMock.EXPECT().
+		SendCoinsFromAccountToModule(gomock.Any(), addr1, types.ModuleName, sdk.NewCoins(sdk.NewInt64Coin(denomBze, 2000))).
+		Times(1)
 
 	_, err := suite.msgServer.UpdateStakingReward(goCtx, &msg)
 	suite.Require().NoError(err)
@@ -380,8 +366,4 @@ func (suite *IntegrationTestSuite) TestUpdateStakingReward_Success() {
 	suite.Require().EqualValues(stakingReward.StakingDenom, storeStakingReward.StakingDenom)
 	suite.Require().EqualValues(stakingReward.MinStake, storeStakingReward.MinStake)
 	suite.Require().EqualValues(stakingReward.Lock, storeStakingReward.Lock)
-
-	expectedRemainingBalance := sdk.NewCoins(sdk.NewInt64Coin("ubze", 19999998000))
-	actualRemainingBalance := suite.app.BankKeeper.GetAllBalances(suite.ctx, addr1)
-	suite.Require().True(actualRemainingBalance.IsEqual(expectedRemainingBalance))
 }

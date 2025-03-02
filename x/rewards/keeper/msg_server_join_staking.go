@@ -33,7 +33,7 @@ func (k msgServer) JoinStaking(goCtx context.Context, msg *types.MsgJoinStaking)
 		}
 	}
 
-	toCapture, err := k.getAmountToCapture("", stakingReward.StakingDenom, msg.Amount, int64(1))
+	toCapture, err := k.getAmountToCapture(stakingReward.StakingDenom, msg.Amount, int64(1))
 	if err != nil {
 		return nil, err
 	}

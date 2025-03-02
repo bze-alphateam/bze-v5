@@ -33,7 +33,7 @@ func (k msgServer) DistributeStakingRewards(goCtx context.Context, msg *types.Ms
 		return nil, sdkerrors.Wrap(sdkerrors.ErrKeyNotFound, "staking reward not found")
 	}
 
-	toCapture, err := k.getAmountToCapture("", stakingReward.PrizeDenom, msg.Amount, 1)
+	toCapture, err := k.getAmountToCapture(stakingReward.PrizeDenom, msg.Amount, 1)
 	if err != nil {
 		return nil, sdkerrors.Wrap(types.ErrInvalidAmount, "could not create capture amount")
 	}

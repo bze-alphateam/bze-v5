@@ -24,7 +24,7 @@ func (k msgServer) ExitStaking(goCtx context.Context, msg *types.MsgExitStaking)
 		return nil, sdkerrors.Wrapf(types.ErrInvalidRewardId, "you are not a participant in this staking reward")
 	}
 
-	partCoins, err := k.getAmountToCapture("", stakingReward.StakingDenom, participation.Amount, int64(1))
+	partCoins, err := k.getAmountToCapture(stakingReward.StakingDenom, participation.Amount, int64(1))
 	if err != nil {
 		return nil, err
 	}

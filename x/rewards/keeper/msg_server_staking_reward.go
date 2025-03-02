@@ -34,13 +34,18 @@ func (k msgServer) CreateStakingReward(goCtx context.Context, msg *types.MsgCrea
 		return nil, types.ErrInvalidPrizeDenom
 	}
 
-	feeParam := k.GetParams(ctx).CreateStakingRewardFee
-	toCapture, err := k.getAmountToCapture(feeParam, stakingReward.PrizeDenom, stakingReward.PrizeAmount, int64(stakingReward.Duration))
+	toCapture, err := k.getAmountToCapture(stakingReward.PrizeDenom, stakingReward.PrizeAmount, int64(stakingReward.Duration))
 	if err != nil {
 		return nil, sdkerrors.Wrapf(err, "could not calculate amount needed to create the reward")
 	}
+	fee := k.getRewardCreationFee(ctx, k.GetParams(ctx).CreateStakingRewardFee)
 
-	err = k.checkUserBalances(ctx, toCapture, acc)
+	neededBalance := toCapture
+	if fee != nil {
+		neededBalance = neededBalance.Add(fee...)
+	}
+
+	err = k.checkUserBalances(ctx, neededBalance, acc)
 	if err != nil {
 		return nil, err
 	}
@@ -48,6 +53,13 @@ func (k msgServer) CreateStakingReward(goCtx context.Context, msg *types.MsgCrea
 	err = k.bankKeeper.SendCoinsFromAccountToModule(ctx, acc, types.ModuleName, toCapture)
 	if err != nil {
 		return nil, err
+	}
+
+	if fee != nil {
+		err = k.distrKeeper.FundCommunityPool(ctx, fee, acc)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	//add ID
@@ -101,7 +113,7 @@ func (k msgServer) UpdateStakingReward(goCtx context.Context, msg *types.MsgUpda
 		return nil, sdkerrors.Wrap(sdkerrors.ErrKeyNotFound, "staking reward not found")
 	}
 
-	toCapture, err := k.getAmountToCapture("", stakingReward.PrizeDenom, stakingReward.PrizeAmount, durationInt)
+	toCapture, err := k.getAmountToCapture(stakingReward.PrizeDenom, stakingReward.PrizeAmount, durationInt)
 	if err != nil {
 		return nil, sdkerrors.Wrapf(err, "could not calculate amount needed to create the reward")
 	}
@@ -131,4 +143,29 @@ func (k msgServer) UpdateStakingReward(goCtx context.Context, msg *types.MsgUpda
 	}
 
 	return &types.MsgUpdateStakingRewardResponse{}, nil
+}
+
+func (k msgServer) getRewardCreationFee(ctx sdk.Context, feeParam string) sdk.Coins {
+	if feeParam == "" {
+		return nil
+	}
+
+	fee, err := sdk.ParseCoinsNormalized(feeParam)
+	if err != nil {
+		k.Logger(ctx).Error("could not parse reward creation fee", "error", err.Error(), "feeParam", feeParam)
+
+		return nil
+	}
+
+	if !fee.IsAllPositive() {
+		return nil
+	}
+	//just avoid any accidental panic
+	if !fee.IsValid() {
+		k.Logger(ctx).Error("invalid reward creation fee", "feeParam", feeParam, "fee", fee)
+
+		return nil
+	}
+
+	return fee
 }

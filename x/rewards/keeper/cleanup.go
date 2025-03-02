@@ -18,7 +18,7 @@ func (k Keeper) removeExpiredPendingTradingRewards(ctx sdk.Context, epochNumber 
 		k.RemovePendingTradingReward(ctx, exp.RewardId)
 
 		//burn coins that were captured
-		toBurn, err := k.getAmountToCapture("", tr.PrizeDenom, tr.PrizeAmount, int64(tr.Slots))
+		toBurn, err := k.getAmountToCapture(tr.PrizeDenom, tr.PrizeAmount, int64(tr.Slots))
 		if err != nil {
 			logger.With("trading_reward", tr).Error("could not create amount to burn from trading reward")
 			continue

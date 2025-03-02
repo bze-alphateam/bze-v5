@@ -2,6 +2,7 @@ package keeper_test
 
 import (
 	"github.com/bze-alphateam/bze/x/rewards/types"
+	"go.uber.org/mock/gomock"
 )
 
 func (suite *IntegrationTestSuite) TestHandleActivateTradingRewardProposal_AlreadyActiveError() {
@@ -47,6 +48,7 @@ func (suite *IntegrationTestSuite) TestHandleActivateTradingRewardProposal_Succe
 		RewardId:    tr.RewardId,
 	}
 
+	suite.epochMock.EXPECT().GetEpochCountByIdentifier(gomock.Any(), "hour").Return(int64(123)).Times(1)
 	suite.Require().NoError(suite.k.HandleActivateTradingRewardProposal(suite.ctx, &prop))
 
 	//check the reward is not in pending anymore

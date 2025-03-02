@@ -1,9 +1,9 @@
 package keeper_test
 
 import (
-	"github.com/bze-alphateam/bze/testutil/simapp"
 	"github.com/bze-alphateam/bze/x/rewards/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	"go.uber.org/mock/gomock"
 )
 
 const (
@@ -57,10 +57,6 @@ func (suite *IntegrationTestSuite) TestMsgClaimStakingRewards_Success() {
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 
 	addr1 := sdk.AccAddress("addr1_______________")
-
-	balances := sdk.NewCoins(newStakeCoin(10000), newBzeCoin(50000))
-	suite.Require().NoError(simapp.FundModuleAccount(suite.app.BankKeeper, suite.ctx, types.ModuleName, balances))
-
 	sr := types.StakingReward{
 		RewardId:         "0001",
 		DistributedStake: "100",
@@ -81,6 +77,13 @@ func (suite *IntegrationTestSuite) TestMsgClaimStakingRewards_Success() {
 		RewardId: sr.RewardId,
 	}
 
+	suite.bankMock.EXPECT().SendCoinsFromModuleToAccount(
+		gomock.Any(),
+		types.ModuleName,
+		addr1,
+		sdk.NewCoins(sdk.NewCoin(denomBze, sdk.NewInt(1200))),
+	).Times(1).Return(nil)
+
 	resp, err := suite.msgServer.ClaimStakingRewards(goCtx, &msg)
 	suite.Require().NoError(err)
 	suite.Require().EqualValues(resp.Amount, "1200")
@@ -92,13 +95,4 @@ func (suite *IntegrationTestSuite) TestMsgClaimStakingRewards_Success() {
 
 	//check joined at is equal to sr.DistributedStake
 	suite.Require().EqualValues(resultedParticipant.JoinedAt, sr.DistributedStake)
-
-	//check balances were subtracted from module
-	moduleAddr := suite.app.AccountKeeper.GetModuleAddress(types.ModuleName)
-	newBalances := suite.app.BankKeeper.GetAllBalances(suite.ctx, moduleAddr)
-	suite.Require().EqualValues(newBalances.AmountOf(denomBze).String(), "48800")
-
-	//check user was awarded with the amount
-	takerBalance := suite.app.BankKeeper.GetAllBalances(suite.ctx, addr1)
-	suite.Require().EqualValues(takerBalance.AmountOf(denomBze).String(), "1200")
 }

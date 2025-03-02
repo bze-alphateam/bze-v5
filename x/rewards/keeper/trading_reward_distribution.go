@@ -30,7 +30,7 @@ func (k Keeper) distributeTradingRewards(ctx sdk.Context, epochNumber int64) {
 			continue
 		}
 
-		rewardPerSlot, err := k.getAmountToCapture("", tr.PrizeDenom, tr.PrizeAmount, 1)
+		rewardPerSlot, err := k.getAmountToCapture(tr.PrizeDenom, tr.PrizeAmount, 1)
 		if err != nil {
 			logger.Error("could not get reward per slot")
 			continue

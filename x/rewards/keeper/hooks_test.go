@@ -1,9 +1,9 @@
 package keeper_test
 
 import (
-	"github.com/bze-alphateam/bze/testutil/simapp"
 	"github.com/bze-alphateam/bze/x/rewards/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	"go.uber.org/mock/gomock"
 )
 
 func (suite *IntegrationTestSuite) TestGetDistributeAllStakingRewardsHook_NoEpoch() {
@@ -70,9 +70,6 @@ func (suite *IntegrationTestSuite) TestGetUnlockPendingUnlockParticipantsHook_No
 
 func (suite *IntegrationTestSuite) TestGetUnlockPendingUnlockParticipantsHook_Success() {
 	hook := suite.k.GetUnlockPendingUnlockParticipantsHook()
-
-	balances := sdk.NewCoins(newStakeCoin(10000), newBzeCoin(50000))
-	suite.Require().NoError(simapp.FundModuleAccount(suite.app.BankKeeper, suite.ctx, types.ModuleName, balances))
 	addr1 := sdk.AccAddress("addr1_______________")
 	pup := types.PendingUnlockParticipant{
 		Index:   types.CreatePendingUnlockParticipantKey(int64(321), "something"),
@@ -81,6 +78,10 @@ func (suite *IntegrationTestSuite) TestGetUnlockPendingUnlockParticipantsHook_Su
 		Denom:   denomBze,
 	}
 	suite.k.SetPendingUnlockParticipant(suite.ctx, pup)
+
+	suite.bankMock.EXPECT().
+		SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, addr1, sdk.NewCoins(sdk.NewCoin(denomBze, sdk.NewInt(1)))).
+		Times(1).Return(nil)
 
 	err := hook.AfterEpochEnd(suite.ctx, "hour", 321)
 	suite.Require().NoError(err)
@@ -95,6 +96,8 @@ func (suite *IntegrationTestSuite) TestGetRemoveExpiredPendingTradingRewardsHook
 	ptre := types.TradingRewardExpiration{RewardId: "01", ExpireAt: uint32(1)}
 	suite.k.SetPendingTradingRewardExpiration(suite.ctx, ptre)
 
+	suite.bankMock.EXPECT().BurnCoins(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+
 	err := hook.AfterEpochEnd(suite.ctx, "not_an_epoch", 1)
 	suite.Require().NoError(err)
 
@@ -104,9 +107,6 @@ func (suite *IntegrationTestSuite) TestGetRemoveExpiredPendingTradingRewardsHook
 
 func (suite *IntegrationTestSuite) TestGetRemoveExpiredPendingTradingRewardsHook_Success() {
 	hook := suite.k.GetRemoveExpiredPendingTradingRewardsHook()
-
-	balances := sdk.NewCoins(newBzeCoin(1000))
-	suite.Require().NoError(simapp.FundModuleAccount(suite.app.BankKeeper, suite.ctx, types.ModuleName, balances))
 	tr := types.TradingReward{
 		RewardId:    "01",
 		PrizeDenom:  denomBze,
@@ -117,6 +117,7 @@ func (suite *IntegrationTestSuite) TestGetRemoveExpiredPendingTradingRewardsHook
 	ptre := types.TradingRewardExpiration{RewardId: tr.RewardId, ExpireAt: uint32(1)}
 	suite.k.SetPendingTradingRewardExpiration(suite.ctx, ptre)
 
+	suite.bankMock.EXPECT().BurnCoins(gomock.Any(), types.ModuleName, sdk.NewCoins(sdk.NewCoin(denomBze, sdk.NewInt(100)))).Times(1)
 	err := hook.AfterEpochEnd(suite.ctx, "hour", 1)
 	suite.Require().NoError(err)
 
@@ -125,18 +126,11 @@ func (suite *IntegrationTestSuite) TestGetRemoveExpiredPendingTradingRewardsHook
 
 	expList := suite.k.GetAllPendingTradingRewardExpiration(suite.ctx)
 	suite.Require().Empty(expList)
-
-	//check burned balances were subtracted from module
-	moduleAddr := suite.app.AccountKeeper.GetModuleAddress(types.ModuleName)
-	newBalances := suite.app.BankKeeper.GetAllBalances(suite.ctx, moduleAddr)
-	suite.Require().EqualValues(newBalances.AmountOf(denomBze).String(), "900")
 }
 
 func (suite *IntegrationTestSuite) TestGetTradingRewardsDistributionHook_NoEpoch() {
 	hook := suite.k.GetTradingRewardsDistributionHook()
 
-	balances := sdk.NewCoins(newBzeCoin(1000))
-	suite.Require().NoError(simapp.FundModuleAccount(suite.app.BankKeeper, suite.ctx, types.ModuleName, balances))
 	tr := types.TradingReward{
 		RewardId:    "01",
 		PrizeDenom:  denomBze,
@@ -146,6 +140,10 @@ func (suite *IntegrationTestSuite) TestGetTradingRewardsDistributionHook_NoEpoch
 	suite.k.SetActiveTradingReward(suite.ctx, tr)
 	ptre := types.TradingRewardExpiration{RewardId: tr.RewardId, ExpireAt: uint32(1)}
 	suite.k.SetActiveTradingRewardExpiration(suite.ctx, ptre)
+
+	suite.bankMock.EXPECT().
+		SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, gomock.Any(), gomock.Any()).
+		Times(0)
 
 	err := hook.AfterEpochEnd(suite.ctx, "not_an_epoch", 1)
 	suite.Require().NoError(err)

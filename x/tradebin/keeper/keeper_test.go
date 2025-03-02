@@ -3,7 +3,6 @@ package keeper_test
 import (
 	"fmt"
 	keepertest "github.com/bze-alphateam/bze/testutil/keeper"
-	"github.com/bze-alphateam/bze/testutil/simapp"
 	"github.com/bze-alphateam/bze/x/tradebin/keeper"
 	"github.com/bze-alphateam/bze/x/tradebin/testutil"
 	"github.com/bze-alphateam/bze/x/tradebin/types"
@@ -31,8 +30,6 @@ func getMarketId() string {
 
 type IntegrationTestSuite struct {
 	suite.Suite
-
-	app *simapp.SimApp
 
 	bankMock  *testutil.MockBankKeeper
 	distrMock *testutil.MockDistrKeeper

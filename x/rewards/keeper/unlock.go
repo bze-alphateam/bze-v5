@@ -21,7 +21,7 @@ func (k Keeper) UnlockAllPendingUnlockParticipantsByEpoch(ctx sdk.Context, epoch
 }
 
 func (k Keeper) performUnlock(ctx sdk.Context, p *types.PendingUnlockParticipant) error {
-	partCoins, err := k.getAmountToCapture("", p.Denom, p.Amount, int64(1))
+	partCoins, err := k.getAmountToCapture(p.Denom, p.Amount, int64(1))
 	if err != nil {
 		return err
 	}

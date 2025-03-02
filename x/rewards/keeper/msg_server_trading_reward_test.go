@@ -1,11 +1,10 @@
 package keeper_test
 
 import (
-	"github.com/bze-alphateam/bze/testutil/simapp"
 	"github.com/bze-alphateam/bze/x/rewards/types"
-	types2 "github.com/bze-alphateam/bze/x/tradebin/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
+	"go.uber.org/mock/gomock"
 )
 
 func (suite *IntegrationTestSuite) TestCreateTradingReward_InvalidRequest() {
@@ -27,8 +26,6 @@ func (suite *IntegrationTestSuite) TestCreateTradingReward_InvalidCreator() {
 func (suite *IntegrationTestSuite) TestCreateTradingReward_InvalidTradingReward() {
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 	addr1 := sdk.AccAddress("addr1_______________")
-	acc1 := suite.app.AccountKeeper.NewAccountWithAddress(suite.ctx, addr1)
-	suite.app.AccountKeeper.SetAccount(suite.ctx, acc1)
 
 	tests := []struct {
 		name string
@@ -167,18 +164,17 @@ func (suite *IntegrationTestSuite) TestCreateTradingReward_InvalidTradingReward(
 func (suite *IntegrationTestSuite) TestCreateTradingReward_MissingSupply() {
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 	addr1 := sdk.AccAddress("addr1_______________")
-	acc1 := suite.app.AccountKeeper.NewAccountWithAddress(suite.ctx, addr1)
-	suite.app.AccountKeeper.SetAccount(suite.ctx, acc1)
 
 	msg := types.MsgCreateTradingReward{
 		Creator:     addr1.String(),
 		PrizeAmount: "10",
-		PrizeDenom:  "ubzesd",
+		PrizeDenom:  denomBze,
 		Duration:    "100",
 		MarketId:    "stake/ubze",
 		Slots:       "1",
 	}
 
+	suite.bankMock.EXPECT().HasSupply(gomock.Any(), denomBze).Times(1).Return(false)
 	_, err := suite.msgServer.CreateTradingReward(goCtx, &msg)
 	suite.Require().ErrorIs(err, types.ErrInvalidPrizeDenom)
 }
@@ -187,21 +183,6 @@ func (suite *IntegrationTestSuite) TestCreateTradingReward_NotEnoughBalance() {
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 
 	addr1 := sdk.AccAddress("addr1_______________")
-	acc1 := suite.app.AccountKeeper.NewAccountWithAddress(suite.ctx, addr1)
-	suite.app.AccountKeeper.SetAccount(suite.ctx, acc1)
-
-	//initial balances need to be 0
-	initialUserBalances := suite.app.BankKeeper.GetAllBalances(suite.ctx, addr1)
-	suite.Require().True(initialUserBalances.IsZero())
-
-	balances := sdk.NewCoins(sdk.NewInt64Coin("ubze", 1))
-	suite.Require().NoError(simapp.FundAccount(suite.app.BankKeeper, suite.ctx, addr1, balances))
-	//create market
-	suite.app.TradebinKeeper.SetMarket(suite.ctx, types2.Market{
-		Base:    "stake",
-		Quote:   "ubze",
-		Creator: "",
-	})
 
 	msg := types.MsgCreateTradingReward{
 		Creator:     addr1.String(),
@@ -209,8 +190,12 @@ func (suite *IntegrationTestSuite) TestCreateTradingReward_NotEnoughBalance() {
 		PrizeDenom:  "ubze",
 		Duration:    "100",
 		MarketId:    "stake/ubze",
-		Slots:       "100",
+		Slots:       "10",
 	}
+
+	suite.bankMock.EXPECT().HasSupply(gomock.Any(), denomBze).Times(1).Return(true)
+	suite.bankMock.EXPECT().SpendableCoins(gomock.Any(), addr1).Times(1).Return(sdk.NewCoins())
+	suite.tradeMock.EXPECT().MarketExists(gomock.Any(), "stake/ubze").Return(true).MinTimes(1)
 
 	_, err := suite.msgServer.CreateTradingReward(goCtx, &msg)
 	suite.Require().Error(err)
@@ -220,29 +205,24 @@ func (suite *IntegrationTestSuite) TestCreateTradingReward_Success() {
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 
 	addr1 := sdk.AccAddress("addr1_______________")
-	acc1 := suite.app.AccountKeeper.NewAccountWithAddress(suite.ctx, addr1)
-	suite.app.AccountKeeper.SetAccount(suite.ctx, acc1)
-
-	//initial balances need to be 0
-	initialUserBalances := suite.app.BankKeeper.GetAllBalances(suite.ctx, addr1)
-	suite.Require().True(initialUserBalances.IsZero())
-
-	balances := sdk.NewCoins(sdk.NewInt64Coin("ubze", 50000002000))
-	suite.Require().NoError(simapp.FundAccount(suite.app.BankKeeper, suite.ctx, addr1, balances))
-	suite.app.TradebinKeeper.SetMarket(suite.ctx, types2.Market{
-		Base:    "stake",
-		Quote:   "ubze",
-		Creator: "",
-	})
 
 	msg := types.MsgCreateTradingReward{
 		Creator:     addr1.String(),
 		PrizeAmount: "200",
-		PrizeDenom:  "ubze",
+		PrizeDenom:  denomBze,
 		Duration:    "100",
 		MarketId:    "stake/ubze",
 		Slots:       "10",
 	}
+
+	suite.epochMock.EXPECT().GetEpochCountByIdentifier(gomock.Any(), "hour").Return(int64(1)).Times(1)
+	suite.bankMock.EXPECT().HasSupply(gomock.Any(), denomBze).Times(1).Return(true)
+	suite.bankMock.EXPECT().SpendableCoins(gomock.Any(), addr1).Times(1).Return(sdk.NewCoins(sdk.NewInt64Coin(denomBze, 51000_000000)))
+	suite.bankMock.EXPECT().
+		SendCoinsFromAccountToModule(gomock.Any(), addr1, types.ModuleName, sdk.NewCoins(sdk.NewInt64Coin(denomBze, 2000))).
+		Times(1)
+	suite.tradeMock.EXPECT().MarketExists(gomock.Any(), "stake/ubze").Return(true).Times(1)
+	suite.distrMock.EXPECT().FundCommunityPool(gomock.Any(), sdk.NewCoins(sdk.NewInt64Coin(denomBze, 50000_000000)), addr1).Times(1)
 
 	res, err := suite.msgServer.CreateTradingReward(goCtx, &msg)
 	suite.Require().NoError(err)
@@ -255,8 +235,4 @@ func (suite *IntegrationTestSuite) TestCreateTradingReward_Success() {
 	suite.Require().EqualValues(uint32(100), storeTradingReward.Duration)
 	suite.Require().EqualValues(msg.MarketId, storeTradingReward.MarketId)
 	suite.Require().EqualValues(uint32(10), storeTradingReward.Slots)
-
-	expectedRemainingBalance := sdk.NewCoins(sdk.NewInt64Coin("ubze", 0))
-	actualRemainingBalance := suite.app.BankKeeper.GetAllBalances(suite.ctx, addr1)
-	suite.Require().True(actualRemainingBalance.IsEqual(expectedRemainingBalance))
 }

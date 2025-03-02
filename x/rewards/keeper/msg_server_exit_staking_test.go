@@ -2,10 +2,10 @@ package keeper_test
 
 import (
 	"fmt"
-	"github.com/bze-alphateam/bze/testutil/simapp"
 	"github.com/bze-alphateam/bze/x/rewards/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
+	"go.uber.org/mock/gomock"
 )
 
 func (suite *IntegrationTestSuite) TestMsgExitStaking_InvalidRequest() {
@@ -47,14 +47,14 @@ func (suite *IntegrationTestSuite) TestMsgExitStaking_MissingStakingRewardPartic
 	suite.Require().ErrorContains(err, "you are not a participant in this staking reward")
 }
 
-func (suite *IntegrationTestSuite) TestMsgExitStaking_Success_OngoingStakingReward() {
+func (suite *IntegrationTestSuite) TestMsgExitStaking_Success_OngoingStakingReward_NoClaim() {
 	//dependencies
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 	addr1 := sdk.AccAddress("addr1_______________")
 	sr := types.StakingReward{
 		RewardId:         "01",
 		PrizeDenom:       denomBze,
-		StakedAmount:     "50",
+		StakedAmount:     "72",
 		DistributedStake: "5",
 		Lock:             100,
 		StakingDenom:     denomBze,
@@ -71,28 +71,22 @@ func (suite *IntegrationTestSuite) TestMsgExitStaking_Success_OngoingStakingRewa
 		Address:  addr1.String(),
 		RewardId: sr.RewardId,
 		Amount:   "22",
-		JoinedAt: "0",
+		JoinedAt: "5",
 	}
 	suite.k.SetStakingRewardParticipant(suite.ctx, srp)
 	suite.k.SetStakingRewardParticipant(suite.ctx, untouchedSrp)
-
-	balances := sdk.NewCoins(newStakeCoin(10000), newBzeCoin(50000))
-	suite.Require().NoError(simapp.FundModuleAccount(suite.app.BankKeeper, suite.ctx, types.ModuleName, balances))
 
 	//tests and asserts
 	msg := types.MsgExitStaking{
 		Creator:  addr1.String(),
 		RewardId: sr.RewardId,
 	}
+	suite.epochMock.EXPECT().GetEpochCountByIdentifier(goCtx, "hour").Return(int64(1))
 	_, err := suite.msgServer.ExitStaking(goCtx, &msg)
 	suite.Require().NoError(err)
 
-	creatorBalance := suite.app.BankKeeper.GetAllBalances(suite.ctx, addr1)
-	//check the user retrieves the unclaimed rewards first
-	suite.Require().EqualValues(creatorBalance.AmountOf(denomBze).String(), "110")
-
 	//check the unlock was created
-	lockKey := types.CreatePendingUnlockParticipantKey(int64(sr.Lock*24), fmt.Sprintf("%s/%s", sr.RewardId, srp.Address))
+	lockKey := types.CreatePendingUnlockParticipantKey(int64(sr.Lock*24+1), fmt.Sprintf("%s/%s", sr.RewardId, srp.Address))
 	unlockList := suite.k.GetAllPendingUnlockParticipant(suite.ctx)
 	suite.Require().NotEmpty(unlockList)
 	suite.Require().EqualValues(unlockList[0].Index, lockKey)
@@ -107,7 +101,74 @@ func (suite *IntegrationTestSuite) TestMsgExitStaking_Success_OngoingStakingRewa
 	//check the staking reward was updated
 	newSr, f := suite.k.GetStakingReward(suite.ctx, sr.RewardId)
 	suite.Require().True(f)
-	suite.Require().EqualValues(newSr.StakedAmount, "28")
+	suite.Require().EqualValues(newSr.StakedAmount, "50")
+
+	//check that the dummy srp is not touched since it wasn't belonging to the message creator
+	untouchedSrpStorage, f := suite.k.GetStakingRewardParticipant(suite.ctx, untouchedSrp.Address, untouchedSrp.RewardId)
+	suite.Require().True(f)
+	suite.Require().EqualValues(untouchedSrpStorage, untouchedSrp)
+}
+
+// tests that upon staking exit the user will also receive his unclaimed rewards
+func (suite *IntegrationTestSuite) TestMsgExitStaking_Success_OngoingStakingReward_WithPendingToClaim() {
+	//dependencies
+	goCtx := sdk.WrapSDKContext(suite.ctx)
+	addr1 := sdk.AccAddress("addr1_______________")
+	sr := types.StakingReward{
+		RewardId:         "01",
+		PrizeDenom:       denomBze,
+		StakedAmount:     "50",
+		DistributedStake: "4",
+		Lock:             100,
+		StakingDenom:     denomBze,
+	}
+	suite.k.SetStakingReward(suite.ctx, sr)
+
+	untouchedSrp := types.StakingRewardParticipant{
+		Address:  "asadsadasda",
+		RewardId: sr.RewardId,
+		Amount:   "25",
+		JoinedAt: "0",
+	}
+	srp := types.StakingRewardParticipant{
+		Address:  addr1.String(),
+		RewardId: sr.RewardId,
+		Amount:   "25",
+		JoinedAt: "0",
+	}
+	suite.k.SetStakingRewardParticipant(suite.ctx, srp)
+	suite.k.SetStakingRewardParticipant(suite.ctx, untouchedSrp)
+
+	//tests and asserts
+	msg := types.MsgExitStaking{
+		Creator:  addr1.String(),
+		RewardId: sr.RewardId,
+	}
+	suite.epochMock.EXPECT().GetEpochCountByIdentifier(gomock.Any(), "hour").Times(1).Return(int64(1))
+	suite.bankMock.EXPECT().
+		SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, addr1, sdk.NewCoins(sdk.NewInt64Coin(denomBze, 100))).
+		Times(1)
+
+	_, err := suite.msgServer.ExitStaking(goCtx, &msg)
+	suite.Require().NoError(err)
+
+	//check the unlock was created
+	lockKey := types.CreatePendingUnlockParticipantKey(int64(sr.Lock*24+1), fmt.Sprintf("%s/%s", sr.RewardId, srp.Address))
+	unlockList := suite.k.GetAllPendingUnlockParticipant(suite.ctx)
+	suite.Require().NotEmpty(unlockList)
+	suite.Require().EqualValues(unlockList[0].Index, lockKey)
+	suite.Require().EqualValues(unlockList[0].Address, srp.Address)
+	suite.Require().EqualValues(unlockList[0].Amount, "25")
+	suite.Require().EqualValues(unlockList[0].Denom, sr.StakingDenom)
+
+	//check the staking reward participant was deleted
+	_, f := suite.k.GetStakingRewardParticipant(suite.ctx, srp.Address, sr.RewardId)
+	suite.Require().False(f)
+
+	//check the staking reward was updated
+	newSr, f := suite.k.GetStakingReward(suite.ctx, sr.RewardId)
+	suite.Require().True(f)
+	suite.Require().EqualValues(newSr.StakedAmount, "25")
 
 	//check that the dummy srp is not touched since it wasn't belonging to the message creator
 	untouchedSrpStorage, f := suite.k.GetStakingRewardParticipant(suite.ctx, untouchedSrp.Address, untouchedSrp.RewardId)
@@ -147,23 +208,20 @@ func (suite *IntegrationTestSuite) TestMsgExitStaking_Success_EmptyingStakingRew
 	suite.k.SetStakingRewardParticipant(suite.ctx, srp)
 	suite.k.SetStakingRewardParticipant(suite.ctx, untouchedSrp)
 
-	balances := sdk.NewCoins(newStakeCoin(10000), newBzeCoin(50000))
-	suite.Require().NoError(simapp.FundModuleAccount(suite.app.BankKeeper, suite.ctx, types.ModuleName, balances))
-
 	//tests and asserts
 	msg := types.MsgExitStaking{
 		Creator:  addr1.String(),
 		RewardId: sr.RewardId,
 	}
+	suite.epochMock.EXPECT().GetEpochCountByIdentifier(gomock.Any(), "hour").Times(1).Return(int64(1))
+	suite.bankMock.EXPECT().
+		SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, addr1, sdk.NewCoins(sdk.NewInt64Coin(denomBze, 250))).
+		Times(1)
 	_, err := suite.msgServer.ExitStaking(goCtx, &msg)
 	suite.Require().NoError(err)
 
-	creatorBalance := suite.app.BankKeeper.GetAllBalances(suite.ctx, addr1)
-	//check the user retrieves the unclaimed rewards first
-	suite.Require().EqualValues(creatorBalance.AmountOf(denomBze).String(), "250")
-
 	//check the unlock was created
-	lockKey := types.CreatePendingUnlockParticipantKey(int64(sr.Lock*24), fmt.Sprintf("%s/%s", sr.RewardId, srp.Address))
+	lockKey := types.CreatePendingUnlockParticipantKey(int64(sr.Lock*24+1), fmt.Sprintf("%s/%s", sr.RewardId, srp.Address))
 	unlockList := suite.k.GetAllPendingUnlockParticipant(suite.ctx)
 	suite.Require().NotEmpty(unlockList)
 	suite.Require().EqualValues(unlockList[0].Index, lockKey)
@@ -210,23 +268,20 @@ func (suite *IntegrationTestSuite) TestMsgExitStaking_Success_RemovingStakingRew
 	}
 	suite.k.SetStakingRewardParticipant(suite.ctx, srp)
 
-	balances := sdk.NewCoins(newStakeCoin(10000), newBzeCoin(50000))
-	suite.Require().NoError(simapp.FundModuleAccount(suite.app.BankKeeper, suite.ctx, types.ModuleName, balances))
-
 	//tests and asserts
 	msg := types.MsgExitStaking{
 		Creator:  addr1.String(),
 		RewardId: sr.RewardId,
 	}
+	suite.epochMock.EXPECT().GetEpochCountByIdentifier(gomock.Any(), "hour").Times(1).Return(int64(1))
+	suite.bankMock.EXPECT().
+		SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, addr1, sdk.NewCoins(sdk.NewInt64Coin(denomBze, 250))).
+		Times(1)
 	_, err := suite.msgServer.ExitStaking(goCtx, &msg)
 	suite.Require().NoError(err)
 
-	creatorBalance := suite.app.BankKeeper.GetAllBalances(suite.ctx, addr1)
-	//check the user retrieves the unclaimed rewards first
-	suite.Require().EqualValues(creatorBalance.AmountOf(denomBze).String(), "250")
-
 	//check the unlock was created
-	lockKey := types.CreatePendingUnlockParticipantKey(int64(sr.Lock*24), fmt.Sprintf("%s/%s", sr.RewardId, srp.Address))
+	lockKey := types.CreatePendingUnlockParticipantKey(int64(sr.Lock*24+1), fmt.Sprintf("%s/%s", sr.RewardId, srp.Address))
 	unlockList := suite.k.GetAllPendingUnlockParticipant(suite.ctx)
 	suite.Require().NotEmpty(unlockList)
 	suite.Require().EqualValues(unlockList[0].Index, lockKey)
@@ -267,20 +322,20 @@ func (suite *IntegrationTestSuite) TestMsgExitStaking_Success_RemovingStakingRew
 	}
 	suite.k.SetStakingRewardParticipant(suite.ctx, srp)
 
-	balances := sdk.NewCoins(newStakeCoin(10000), newBzeCoin(50000))
-	suite.Require().NoError(simapp.FundModuleAccount(suite.app.BankKeeper, suite.ctx, types.ModuleName, balances))
-
 	//tests and asserts
 	msg := types.MsgExitStaking{
 		Creator:  addr1.String(),
 		RewardId: sr.RewardId,
 	}
+	suite.epochMock.EXPECT().GetEpochCountByIdentifier(gomock.Any(), "hour").Times(1).Return(int64(1))
+	suite.bankMock.EXPECT().
+		SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, addr1, sdk.NewCoins(sdk.NewInt64Coin(denomBze, 250))).
+		Times(1)
+	suite.bankMock.EXPECT().
+		SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, addr1, sdk.NewCoins(sdk.NewInt64Coin(denomBze, 50))).
+		Times(1)
 	_, err := suite.msgServer.ExitStaking(goCtx, &msg)
 	suite.Require().NoError(err)
-
-	creatorBalance := suite.app.BankKeeper.GetAllBalances(suite.ctx, addr1)
-	//check the user retrieves the unclaimed rewards + the staked balance
-	suite.Require().EqualValues(creatorBalance.AmountOf(denomBze).String(), "300")
 
 	//check the unlock was NOT created since the funds should be released immediately
 	unlockList := suite.k.GetAllPendingUnlockParticipant(suite.ctx)

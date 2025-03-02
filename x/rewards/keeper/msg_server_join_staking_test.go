@@ -1,10 +1,10 @@
 package keeper_test
 
 import (
-	"github.com/bze-alphateam/bze/testutil/simapp"
 	"github.com/bze-alphateam/bze/x/rewards/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
+	"go.uber.org/mock/gomock"
 )
 
 func (suite *IntegrationTestSuite) TestMsgJoinStaking_InvalidRequest() {
@@ -47,8 +47,6 @@ func (suite *IntegrationTestSuite) TestMsgJoinStaking_AmountLowerThanMinStake() 
 	//dependencies
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 	addr1 := sdk.AccAddress("addr1_______________")
-	balances := sdk.NewCoins(sdk.NewInt64Coin("ubze", 10000))
-	suite.Require().NoError(simapp.FundAccount(suite.app.BankKeeper, suite.ctx, addr1, balances))
 	sr := types.StakingReward{
 		RewardId:         "01",
 		PrizeDenom:       denomBze,
@@ -68,6 +66,7 @@ func (suite *IntegrationTestSuite) TestMsgJoinStaking_AmountLowerThanMinStake() 
 		Amount:   "1",
 	}
 
+	suite.bankMock.EXPECT().SpendableCoins(gomock.Any(), addr1).Times(1).Return(sdk.NewCoins(sdk.NewInt64Coin(denomBze, 1001)))
 	_, err := suite.msgServer.JoinStaking(goCtx, &msg)
 	suite.Require().Error(err)
 	suite.Require().ErrorContains(err, "amount is smaller than staking reward min stake")
@@ -77,8 +76,6 @@ func (suite *IntegrationTestSuite) TestMsgJoinStaking_AllowedAmountLowerThanMinS
 	//dependencies
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 	addr1 := sdk.AccAddress("addr1_______________")
-	balances := sdk.NewCoins(sdk.NewInt64Coin("ubze", 10000))
-	suite.Require().NoError(simapp.FundAccount(suite.app.BankKeeper, suite.ctx, addr1, balances))
 	sr := types.StakingReward{
 		RewardId:         "01",
 		PrizeDenom:       denomBze,
@@ -98,12 +95,20 @@ func (suite *IntegrationTestSuite) TestMsgJoinStaking_AllowedAmountLowerThanMinS
 		Amount:   "1000",
 	}
 	//first stake the min amount allowed
+	suite.bankMock.EXPECT().
+		SendCoinsFromAccountToModule(gomock.Any(), addr1, types.ModuleName, sdk.NewCoins(sdk.NewInt64Coin(denomBze, 1000))).
+		Times(1)
+	suite.bankMock.EXPECT().SpendableCoins(gomock.Any(), addr1).Times(1).Return(sdk.NewCoins(sdk.NewInt64Coin(denomBze, 1001)))
 	_, err := suite.msgServer.JoinStaking(goCtx, &msg)
 	suite.Require().NoError(err)
 
 	//try to stake an amount lower than min stake
 	//it should be allowed since we already have a stake greater than/equal to min stake
 	msg.Amount = "50"
+	suite.bankMock.EXPECT().
+		SendCoinsFromAccountToModule(gomock.Any(), addr1, types.ModuleName, sdk.NewCoins(sdk.NewInt64Coin(denomBze, 50))).
+		Times(1)
+	suite.bankMock.EXPECT().SpendableCoins(gomock.Any(), addr1).Times(1).Return(sdk.NewCoins(sdk.NewInt64Coin(denomBze, 1001)))
 	_, err = suite.msgServer.JoinStaking(goCtx, &msg)
 	suite.Require().NoError(err)
 }
@@ -131,7 +136,7 @@ func (suite *IntegrationTestSuite) TestMsgJoinStaking_NotEnoughBalance() {
 		RewardId: sr.RewardId,
 		Amount:   "10",
 	}
-
+	suite.bankMock.EXPECT().SpendableCoins(gomock.Any(), addr1).Times(1).Return(sdk.NewCoins(sdk.NewInt64Coin(denomBze, 0)))
 	_, err := suite.msgServer.JoinStaking(goCtx, &msg)
 	suite.Require().Error(err)
 	suite.Require().ErrorContains(err, "user balance is too low")
@@ -141,9 +146,6 @@ func (suite *IntegrationTestSuite) TestMsgJoinStaking_Success_NewParticipant() {
 	//dependencies
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 	addr1 := sdk.AccAddress("addr1_______________")
-
-	balances := sdk.NewCoins(sdk.NewInt64Coin("ubze", 10000))
-	suite.Require().NoError(simapp.FundAccount(suite.app.BankKeeper, suite.ctx, addr1, balances))
 
 	sr := types.StakingReward{
 		RewardId:         "01",
@@ -164,6 +166,11 @@ func (suite *IntegrationTestSuite) TestMsgJoinStaking_Success_NewParticipant() {
 		RewardId: sr.RewardId,
 		Amount:   "10",
 	}
+	suite.bankMock.EXPECT().
+		SendCoinsFromAccountToModule(gomock.Any(), addr1, types.ModuleName, sdk.NewCoins(sdk.NewInt64Coin(denomBze, 10))).
+		Times(1)
+
+	suite.bankMock.EXPECT().SpendableCoins(gomock.Any(), addr1).Times(1).Return(sdk.NewCoins(sdk.NewInt64Coin(denomBze, 1001)))
 
 	_, err := suite.msgServer.JoinStaking(goCtx, &msg)
 	suite.Require().NoError(err)
@@ -178,24 +185,12 @@ func (suite *IntegrationTestSuite) TestMsgJoinStaking_Success_NewParticipant() {
 	storageSr, f := suite.k.GetStakingReward(suite.ctx, sr.RewardId)
 	suite.Require().True(f)
 	suite.Require().EqualValues(storageSr.StakedAmount, "10")
-
-	creatorBalance := suite.app.BankKeeper.GetAllBalances(suite.ctx, addr1)
-	//check the user retrieves the unclaimed rewards first
-	suite.Require().EqualValues(creatorBalance.AmountOf(denomBze).String(), "9990")
-
-	//check balances were subtracted from module
-	moduleAddr := suite.app.AccountKeeper.GetModuleAddress(types.ModuleName)
-	newBalances := suite.app.BankKeeper.GetAllBalances(suite.ctx, moduleAddr)
-	suite.Require().EqualValues(newBalances.AmountOf(denomBze).String(), "10")
 }
 
 func (suite *IntegrationTestSuite) TestMsgJoinStaking_Success_ExistingParticipant() {
 	//dependencies
 	goCtx := sdk.WrapSDKContext(suite.ctx)
 	addr1 := sdk.AccAddress("addr1_______________")
-
-	balances := sdk.NewCoins(sdk.NewInt64Coin("ubze", 10000))
-	suite.Require().NoError(simapp.FundAccount(suite.app.BankKeeper, suite.ctx, addr1, balances))
 
 	sr := types.StakingReward{
 		RewardId:         "01",
@@ -224,6 +219,10 @@ func (suite *IntegrationTestSuite) TestMsgJoinStaking_Success_ExistingParticipan
 		RewardId: sr.RewardId,
 		Amount:   "10",
 	}
+	suite.bankMock.EXPECT().
+		SendCoinsFromAccountToModule(gomock.Any(), addr1, types.ModuleName, sdk.NewCoins(sdk.NewInt64Coin(denomBze, 10))).
+		Times(1)
+	suite.bankMock.EXPECT().SpendableCoins(gomock.Any(), addr1).Times(1).Return(sdk.NewCoins(sdk.NewInt64Coin(denomBze, 1001)))
 
 	_, err := suite.msgServer.JoinStaking(goCtx, &msg)
 	suite.Require().NoError(err)
@@ -238,13 +237,4 @@ func (suite *IntegrationTestSuite) TestMsgJoinStaking_Success_ExistingParticipan
 	storageSr, f := suite.k.GetStakingReward(suite.ctx, sr.RewardId)
 	suite.Require().True(f)
 	suite.Require().EqualValues(storageSr.StakedAmount, "60")
-
-	creatorBalance := suite.app.BankKeeper.GetAllBalances(suite.ctx, addr1)
-	//check the user retrieves the unclaimed rewards first
-	suite.Require().EqualValues(creatorBalance.AmountOf(denomBze).String(), "9990")
-
-	//check balances were subtracted from module
-	moduleAddr := suite.app.AccountKeeper.GetModuleAddress(types.ModuleName)
-	newBalances := suite.app.BankKeeper.GetAllBalances(suite.ctx, moduleAddr)
-	suite.Require().EqualValues(newBalances.AmountOf(denomBze).String(), "10")
 }

@@ -1,10 +1,10 @@
 package keeper_test
 
 import (
-	"github.com/bze-alphateam/bze/testutil/simapp"
 	"github.com/bze-alphateam/bze/x/rewards/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
+	"go.uber.org/mock/gomock"
 )
 
 func (suite *IntegrationTestSuite) TestMsgDistributeStakingRewards_InvalidRequest() {
@@ -82,6 +82,8 @@ func (suite *IntegrationTestSuite) TestMsgDistributeStakingRewards_NoUserBalance
 		RewardId: sr.RewardId,
 	}
 
+	suite.bankMock.EXPECT().SpendableCoins(gomock.Any(), addr1).Times(1).Return(sdk.NewCoins())
+
 	_, err := suite.msgServer.DistributeStakingRewards(goCtx, &msg)
 	suite.Require().Error(err)
 	suite.Require().ErrorIs(err, sdkerrors.ErrInsufficientFunds)
@@ -90,11 +92,7 @@ func (suite *IntegrationTestSuite) TestMsgDistributeStakingRewards_NoUserBalance
 func (suite *IntegrationTestSuite) TestMsgDistributeStakingRewards_Success() {
 	//dependencies
 	goCtx := sdk.WrapSDKContext(suite.ctx)
-	balances := sdk.NewCoins(newBzeCoin(10000))
 	addr1 := sdk.AccAddress("addr1_______________")
-	creatorAcc := suite.app.AccountKeeper.NewAccountWithAddress(suite.ctx, addr1)
-	suite.app.AccountKeeper.SetAccount(suite.ctx, creatorAcc)
-	suite.Require().NoError(simapp.FundAccount(suite.app.BankKeeper, suite.ctx, creatorAcc.GetAddress(), balances))
 
 	sr := types.StakingReward{
 		RewardId:         "01",
@@ -110,6 +108,15 @@ func (suite *IntegrationTestSuite) TestMsgDistributeStakingRewards_Success() {
 		RewardId: sr.RewardId,
 	}
 
+	//user has balance in bank more than distributed reward
+	suite.bankMock.EXPECT().SpendableCoins(gomock.Any(), addr1).Times(1).Return(sdk.NewCoins(sdk.NewInt64Coin(denomBze, 1001)))
+	suite.bankMock.EXPECT().SendCoinsFromAccountToModule(
+		gomock.Any(),
+		addr1,
+		types.ModuleName,
+		sdk.NewCoins(sdk.NewCoin(denomBze, sdk.NewInt(1000))),
+	).Times(1).Return(nil)
+
 	//test & asserts
 	_, err := suite.msgServer.DistributeStakingRewards(goCtx, &msg)
 	suite.Require().NoError(err)
@@ -119,13 +126,4 @@ func (suite *IntegrationTestSuite) TestMsgDistributeStakingRewards_Success() {
 	suite.Require().True(f)
 	suite.Require().NotEqualValues(newSr, sr)
 	suite.Require().NotEqualValues(newSr.DistributedStake, sr.DistributedStake)
-
-	//check user balance was deducted
-	creatorBal := suite.app.BankKeeper.GetAllBalances(suite.ctx, creatorAcc.GetAddress())
-	suite.Require().EqualValues(creatorBal.AmountOf(denomBze).String(), "9000")
-
-	//check module received the reward
-	moduleAddr := suite.app.AccountKeeper.GetModuleAddress(types.ModuleName)
-	moduleBalances := suite.app.BankKeeper.GetAllBalances(suite.ctx, moduleAddr)
-	suite.Require().EqualValues(moduleBalances.AmountOf(denomBze).String(), "1000")
 }

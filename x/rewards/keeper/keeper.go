@@ -71,7 +71,7 @@ func (k Keeper) smallZeroFillId(id uint64) string {
 	return fmt.Sprintf("%012d", id)
 }
 
-func (k Keeper) getAmountToCapture(feeParam, denom, amount string, multiplier int64) (sdk.Coins, error) {
+func (k Keeper) getAmountToCapture(denom, amount string, multiplier int64) (sdk.Coins, error) {
 	amtInt, ok := sdk.NewIntFromString(amount)
 	if !ok {
 		return nil, fmt.Errorf("could not convert povided amount to int: %s", amount)
@@ -79,32 +79,12 @@ func (k Keeper) getAmountToCapture(feeParam, denom, amount string, multiplier in
 
 	toCapture := sdk.NewCoin(denom, amtInt)
 	toCapture.Amount = toCapture.Amount.MulRaw(multiplier)
-	if !toCapture.IsPositive() {
+	if !toCapture.IsValid() || !toCapture.IsPositive() {
 		//should never happen
 		return nil, fmt.Errorf("calculated amount to capture is not positive")
 	}
 
-	result := sdk.NewCoins(toCapture)
-	if feeParam == "" {
-		return result, nil
-	}
-
-	fee, err := sdk.ParseCoinNormalized(feeParam)
-	if err != nil {
-		return nil, fmt.Errorf("could not parse fee param")
-	}
-
-	if !fee.IsPositive() {
-		return result, nil
-	}
-
-	result = result.Add(fee)
-	//just avoid any accidental panic
-	if !result.IsValid() {
-		return nil, fmt.Errorf("invalid amount to capture")
-	}
-
-	return result, nil
+	return sdk.NewCoins(toCapture), nil
 }
 
 func (k Keeper) getNewTradingRewardExpireAt(ctx sdk.Context) uint32 {

@@ -9,7 +9,7 @@ import (
 )
 
 func TestGetParams(t *testing.T) {
-	k, ctx := testkeeper.RewardsKeeper(t)
+	k, ctx := testkeeper.RewardsKeeper(t, nil, nil, nil, nil)
 	params := types.DefaultParams()
 
 	k.SetParams(ctx, params)
