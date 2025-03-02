@@ -26,7 +26,8 @@ func CreateUpgradeHandler(
 			return newVm, err
 		}
 
-		//we had a bug that sent staking reward fee to the Rewards module. We need to move those funds from rewards module to
+		//we had a bug that sent staking reward fee to the Rewards module.
+		//We need to move those funds from rewards module to community pool
 		rAcc := acc.GetModuleAddress(rTypes.ModuleName)
 		//hardcoded denom to run it only for mainnet
 		rBal := bank.GetBalance(ctx, rAcc, "ubze")
