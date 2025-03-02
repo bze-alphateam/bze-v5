@@ -744,7 +744,7 @@ func New(
 func (app *App) setupUpgradeHandlers(cfg module.Configurator) {
 	app.UpgradeKeeper.SetUpgradeHandler(
 		v800.UpgradeName,
-		v800.CreateUpgradeHandler(cfg, app.mm),
+		v800.CreateUpgradeHandler(cfg, app.mm, app.BankKeeper, app.DistrKeeper, app.AccountKeeper),
 	)
 }
 
