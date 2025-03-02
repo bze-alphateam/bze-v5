@@ -20,7 +20,7 @@ func (suite *IntegrationTestSuite) TestAddAndGetEpochInfo() {
 
 	// Validate fetched info
 	suite.Equal("test-epoch", fetchedEpochInfo.Identifier, "Fetched epoch identifier mismatch")
-	suite.True(fetchedEpochInfo.StartTime.After(epochInfo.StartTime), "Fetched epoch start time mismatch")
+	suite.Equal(epochInfo, fetchedEpochInfo, "Fetched epoch info mismatch")
 
 	// Attempt to add the same epoch info should fail
 	err = suite.keeper.AddEpochInfo(suite.ctx, epochInfo)
@@ -41,16 +41,40 @@ func (suite *IntegrationTestSuite) TestDeleteEpochInfo() {
 }
 
 func (suite *IntegrationTestSuite) TestIterateEpochInfo() {
+	// Define an epoch info
+	epochInfo := types.NewGenesisEpochInfo("test-epoch", time.Hour)
+
+	// Attempt to add epoch info
+	err := suite.keeper.AddEpochInfo(suite.ctx, epochInfo)
+	suite.NoError(err)
+	epochInfo.Identifier = "another-epoch"
+	err = suite.keeper.AddEpochInfo(suite.ctx, epochInfo)
+	suite.NoError(err)
+
 	count := 0
 	suite.keeper.IterateEpochInfo(suite.ctx, func(index int64, epochInfo types.EpochInfo) (stop bool) {
 		count++
 		return false
 	})
 
-	suite.Equal(3, count, "IterateEpochInfo did not iterate over all epochs correctly")
+	suite.Equal(2, count, "IterateEpochInfo did not iterate over all epochs correctly")
 }
 
 func (suite *IntegrationTestSuite) TestAllEpochInfos() {
+	// Define an epoch info
+	epochInfo := types.NewGenesisEpochInfo("test-epoch", time.Hour)
+
+	// Attempt to add epoch info
+	err := suite.keeper.AddEpochInfo(suite.ctx, epochInfo)
+	suite.NoError(err)
+	epochInfo.Identifier = "another-epoch"
+	err = suite.keeper.AddEpochInfo(suite.ctx, epochInfo)
+	suite.NoError(err)
+
+	// Fetch the epoch info
+	fetchedEpochInfo := suite.keeper.GetEpochInfo(suite.ctx, "test-epoch")
+	suite.NotEqual(types.EpochInfo{}, fetchedEpochInfo, "Fetch operation failed to retrieve the correct epoch info")
+
 	allEpochs := suite.keeper.AllEpochInfos(suite.ctx)
-	suite.Len(allEpochs, 3, "AllEpochInfos did not return all epoch infos")
+	suite.Len(allEpochs, 2, "AllEpochInfos did not return all epoch infos")
 }
